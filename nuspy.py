@@ -1,294 +1,428 @@
 
-import sys, os, re, shutil, subprocess
+import sys, os, shutil, pytmd, struct, functools
 import urllib.request
+try:
+	#Completely borrowed the Cyrpto.Cipher idea from 
+	#zecoxao from gbatemp.  His documentation of it really
+	#made it easy.  I was using the aes implementation included
+	#but its painfully slow
+	from Crypto.Cipher import *
+	useCrypto = True
+except ImportError:
+	import aes
+	useCrypto = False
+
 
 usage = """
-nuspy.py <titleid>
-nuspy.py <titleid> <country>
-nuspy.py <titleid> <version>
-nuspy.py <titleid> <country> <version> 
-<country> options E/J/U
-<version> is base10 number and can be found at:
-		  http://wiiubrew.org/wiki/Title_database
-Titleid is a mandatory field and can be used with the dash or without.
-Version and Country are optional and default to newest and USA respectively.
-"""
+	nuspy.py <titleid>
+	nuspy.py <titleid> <country>
+	nuspy.py <titleid> <version>
+	nuspy.py <titleid> <country> <version> 
+	<country> options E/J/U  
+		****DEPRECATED SINCE I NO LONGER USE THE WII IMPERSONATOR 
+		****AND DON'T KNOW WHERE THE COUNTRY CHECK IS IN THE TMD. 
+		****IF YOU WANT A SPECIFIC COUNTRY CHECK THE LOGS AT THE 
+		****WII IMPERSONATOR AND SPECIFY THE TITLE AND VER
+		****http://wii.marcan.st/wiimpersonator/reports/wiiu/
+	<version> is base10 number and can be found at:
+		****http://wiiubrew.org/wiki/Title_database
+	Titleid is a mandatory field,used with or without the dash.
+	Version is optional and defaults to newest.
+	"""
+
+credits = """
+	Data is no longer pulled from Wii U Impersonator! Yay!
+	Data is now directly downloaded and parsed from the TMD ticket
+	Thanks to fail0verfl0w for their efforts! Still thanks to them!
+	Thanks WulfySytlez, Bug_Checker_, NWPlayer123. 
+	Especially to Crediar for the CDecrypt source that was easy to 
+	read, informative and documented well enough!
+	Coded by Onion_Knight
+	"""
 
 #Check argument for title, country and version...set defaults
-if len(sys.argv) < 2 or len(sys.argv) > 4:
-	print(usage)
-	exit()
-	
-else:
-	if len(sys.argv) == 2:
-		titleid = sys.argv[1]
-		if titleid.find('-') == -1:
-			titleid = titleid[:8] + '-' + titleid[8:]
-			titleid = titleid.lower()
-		elif titleid.find('-') > 0:
-			titleid = titleid.lower()
-		else:
-			print(usage)
-			exit()
+def getArgs():
+	if len(sys.argv) < 2 or len(sys.argv) > 4:
 
-		c = 'USA'
-		ver = None
-  
-	elif len(sys.argv) == 3:
-		titleid = sys.argv[1]
-		if titleid.find('-') == -1:
-			titleid = titleid[:8] + '-' + titleid[8:]
-			titleid = titleid.lower()
-		elif titleid.find('-') > 0:
-			titleid = titleid.lower()
-		else:
-			print(usage)
-			exit()
-            
-		if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
-			c = sys.argv[2].lower()
-			if c == 'u':
-				c = 'USA'
-			elif c == 'j':
-				c = 'JPN'
-			elif c == 'e':
-				c = 'EUR'
-			ver = None
-		elif sys.argv[2].isdigit():
-			ver = str(sys.argv[2])
+		print(usage)
+		exit()
+	else:
+		if len(sys.argv) == 2:
+			titleid = sys.argv[1]
+			if titleid.find('-') == -1:
+				if len(titleid) != 16:
+					print(usage)
+				else:
+					titleid = titleid.lower()
+			elif titleid.find('-') > 0:
+				titleid = ''.join(titleid.split('-'))
+				titleid = titleid.lower()
+			else:
+				print(usage)
+				exit()
+
 			c = 'USA'
-		else:
-			print(usage)
-			exit()
-        
-	elif len(sys.argv) == 4:
-		titleid = sys.argv[1]
-		if titleid.find('-') == -1:
-			titleid = titleid[:8] + '-' + titleid[8:]
-			titleid = titleid.lower()
-		elif titleid.find('-') > 0:
-			titleid = titleid.lower()
-		else:
-			print(usage)
-			exit()
-            
-		if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
-			c = sys.argv[2].lower()
-			if c == 'u':
+			ver = None
+			
+			return [titleid,c,ver]
+		
+		elif len(sys.argv) == 3:
+			titleid = sys.argv[1]
+			if titleid.find('-') == -1:
+				if len(titleid) != 16:
+					print(usage)
+				else:
+					titleid = titleid.lower()
+			elif titleid.find('-') > 0:
+				titleid = ''.join(titleid.split('-'))
+				titleid = titleid.lower()
+			else:
+				print(usage)
+				exit()
+				
+			if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
+				c = sys.argv[2].lower()
+				if c == 'u':
+					c = 'USA'
+				elif c == 'j':
+					c = 'JPN'
+				elif c == 'e':
+					c = 'EUR'
+				ver = None
+			elif sys.argv[2].isdigit():
+				ver = str(sys.argv[2])
 				c = 'USA'
-			elif c == 'j':
-				c = 'JPN'
-			elif c == 'e':
-				c = 'EUR'
-		elif sys.argv[2].isdigit():
-			print(usage)
-			exit()
+			else:
+				print(usage)
+				exit()
+			return [titleid,c,ver]
+		elif len(sys.argv) == 4:
+			titleid = sys.argv[1]
+			if titleid.find('-') == -1:
+				if len(titleid) != 16:
+					print(usage)
+				else:
+					titleid = titleid.lower()
+			elif titleid.find('-') > 0:
+				titleid = ''.join(titleid).split('-')
+				titleid = titleid.lower()
+			else:
+				print(usage)
+				exit()
+				
+			if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
+				c = sys.argv[2].lower()
+				if c == 'u':
+					c = 'USA'
+				elif c == 'j':
+					c = 'JPN'
+				elif c == 'e':
+					c = 'EUR'
+			elif sys.argv[2].isdigit():
+				print(usage)
+				exit()
 
-		if  sys.argv[3].isdigit():
-			ver = str(sys.argv[3])
-		else:
-			print(usage)
-			exit()
+			if  sys.argv[3].isdigit():
+				ver = str(sys.argv[3])
+			else:
+				print(usage)
+				exit()
+			return [titleid,c,ver]
 
 #Variables
-repover = ''
-filedir = os.getcwd()
-selectedtitle = ''
+nus = r'http://nus.cdn.shop.wii.com/ccs/download/' 
 
+#KEYS
+etkey_hex =''
+ckey_hex = ''
+tidkey_hex = ''
+dtkey_hex =''
+etkey =[]			#Encrypted Title Key
+ckey =[]			#Common Key
+tkey_iv = []		#Title Key IV
+dtkey = [] 			#Decrypted Title Key
+		
 
+def downloadTMD(titleid,ver,fileid):
+	
+	print("Downloading TMD for:",titleid)
+
+	try:
+		if fileid == 'tmd' and ver == None:									#If No version selected currently, its cool well get it when we grab TMD file
+			tmdurl = nus + titleid + r'/tmd'
+			tmdfile = bytes(urllib.request.urlopen(tmdurl).read())
+			#print(dir(tmdfile))
+			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
+			print("No Version Selected, Found:",tmdver)
+			if os.path.isdir(tmdver):											#Have we downloaded this before?  If so we this block removes the whole thing
+				os.chdir(tmdver)
+				if len(os.listdir(os.getcwd())) > 0:
+					os.chdir('..')
+					shutil.rmtree(tmdver)
+			os.mkdir(tmdver)													#Create a new tmd version directory and get there.
+			os.chdir(tmdver)
+			outf =  open('tmd', r'wb')
+			outf.write(tmdfile)
+		elif fileid == 'tmd' and ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
+			tmdurl = urllib.request.urlopen(nus + titleid + r'tmd.'+ver)
+			tmdfile = urllib.request.urlopen(tmdurl).read()
+			print("Writing TMD to file")
+			outf =  open('tmd', r'wb')
+			outf.write(tmdfile)
+		outf.close()
+		return 
+	except Exception as e:
+		print("Exception:",e)
+		exit()
 # Find titles from REPO
 
-def findTitle(logf, titleid):
-	log = urllib.request.urlopen(repo + r'/' + logf)
-	log = log.read().decode(encoding="utf-8")
+def parseTMD():
+	if os.path.isfile('tmd'):
+		tmd = pytmd.TMD_PARSER('tmd')
+		tmd.ReadContent()
+		print("Parsing TMD for:", tmd.tmd_title_id)
+		print("Titles found:")
+		titles = []
+		for title in tmd.tmd_contents:
+			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
+			titles.append(title.id)
+		return (tmd,titles)
+	else:
+		print("TMD File Not Found!")
+		exit()
 	
-	m = re.search('(?ms)\* DETAILED DUMPS \*(.*).*\* MESSAGE LOG \*', log)
-	
-	tid = ''
-	version = ''
-	size = ''
-	content = []
+def downloadTitles(titleid,titles):
 		
-	if m != None:
-		dump = m.group(1).split('\n')
-		#print("Checking Lines:", len(dump))
-		for i in range(len(dump)):
-			if dump[i].startswith(" Title ID:"):
-				tid = dump[i][11:].lower()
-				if dump[i+1].startswith(" Version:"):
-					version = str(int(dump[i+1][10:],16))
-					size = dump[i+2][7:]
-				elif dump[i+1].startswith(" Size:"):
-					version = 1
-					size = dump[i+1][7:]
-				#print("Found: ", tid, version)
-				if tid == titleid:
-					print("Located TitleID: ", tid)
-					print("Version: ", version)
-					print("Size: ", size)
-					if dump[i+11].startswith("  Contents:"):
-						x = i + 13
-						for j in range(len(dump)-x):
-							#print(dump[x+j])
-							titleline = dump[x+j]
-							id = titleline[3:11]
-							titlenum = titleline[12:16].strip()
-							type = titleline[18:25].strip()
-							size = titleline[26:35].strip()
-							hash = titleline[40:].strip()
-							#print(id,titlenum,type,size)
-							content.append(id)
-							if dump[x+j+1].startswith(" TMD"):
-								break					
-					if dump[i+12].startswith("  Contents:"):
-						x = i + 14
-						for j in range(len(dump)-x):
-							print(dump[x+j])
-							titleline = dump[x+j]
-							id = titleline[3:11]
-							titlenum = titleline[12:16].strip()
-							type = titleline[18:25].strip()
-							size = titleline[26:35].strip()
-							hash = titleline[40:].strip()
-							#print(id,titlenum,type,size)
-							content.append(id)
-							if dump[x+j+1].startswith(" TMD"):
-								break
-					if dump[i+13].startswith("  Contents:"):
-						x = i + 15
-						for j in range(len(dump)-x):
-							titleline = dump[x+j]
-							id = titleline[3:11]
-							titlenum = titleline[12:16].strip()
-							type = titleline[18:25].strip()
-							size = titleline[26:35].strip()
-							hash = titleline[40:].strip()
-							#print(id,titlenum,type,size)
-							content.append(id)
-							if dump[x+j+1].startswith(" TMD"):
-								break
+	for title in titles:
+		url = nus + titleid + r'/' + title
+		print("Downloading:", title)
+		f = bytes(urllib.request.urlopen(url).read())
+		open(title, 'wb').write(f)
+	f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
+	print("Downloading cetk")
+	open('cetk', 'wb').write(f)
+	return
 
-					return tid, version, content
-	return None
+def loadTitleKeys(rootdir):
+	"""
+	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
+	Basically this is a python implementation of Crediar's CDecrypt.  He gets 
+	full credit for both demonstrating how this looks and where the encrypted Title ID.
+	"""
+	cetkf = open('cetk', 'rb')
+	cetkf.seek(0x1bf,0)
+	cetk = cetkf.read(16)
+	ckey = open(rootdir + '\ckey.bin', 'rb').read(16)
+	
+	tidkeyf = open('tmd', 'rb')
+	tidkeyf.seek(0x18c, 0)
+	tidkey = tidkeyf.read(8) 
+	tidkey += b'\x00'*8
+	
+	cetkf.close()
+	tidkeyf.close()
+	
+	etkey_hex = ('%016x' % struct.unpack('>QQ',cetk)[0]) + ('%016x' % struct.unpack('>QQ', cetk)[1])
+	ckey_hex = ('%016x' % struct.unpack('>QQ', ckey)[0]) + ('%016x' % struct.unpack('>QQ', ckey)[1])
+	tidkey_hex = ('%016x' % struct.unpack('>QQ', tidkey)[0]) + ('%016x' % struct.unpack('>QQ', tidkey)[1])
+	
+	
+	etkey =  list(struct.unpack('>BBBBBBBBBBBBBBBB',cetk))
+	ckey  =  list(struct.unpack('>BBBBBBBBBBBBBBBB',ckey))
+	tkey_iv = list(struct.unpack('>BBBBBBBBBBBBBBBB',tidkey))
+	return [etkey,ckey,tkey_iv],[etkey_hex,ckey_hex,tidkey_hex]
 
-def downloadTitle(selectedtitle):
-	thistit, ver, titles = selectedtitle
-	thistit = ''.join(thistit.split('-')).lower()
-	titledir = filedir + r'/' + thistit
-	countrydir = titledir + r'/' + c
-	verdir = countrydir + r'/' + ver
-    
-	if os.path.isdir(titledir):
-		os.chdir(titledir)
+def decryptData(keys):
+	data,d_crypt_key,iv_key = keys
+	
+	decrypted = ''
+	if useCrypto:
+		try:
+			dkey = bytes(d_crypt_key)
+			iv = bytes(iv_key)
+			aes_crypto = AES.new(dkey,AES.MODE_CBC, iv)
+			decrypted = aes_crypto.decrypt(bytes(data))
+			
+			decrypted =''.join(list(map(chr,[byte for byte in decrypted])))
+		except Exception as e:
+			print(e)	
 	else:
-		os.mkdir(titledir)
-		os.chdir(titledir)
-	if os.path.isdir(countrydir):
-		os.chdir(countrydir)
+		try:
+			moo = aes.AESModeOfOperation()
+			mode = aes.AESModeOfOperation.modeOfOperation["CBC"]
+			keysize = 16	
+			
+
+			decrypted = moo.decrypt(data, None, mode, d_crypt_key, keysize, iv_key)
+		except Exception as e:
+			print(e)
+	return decrypted 
+
+def decryptTitleKey(keys):
+	decrypted = decryptData(keys)
+	dtkey_packed = 0
+	dtkey  = list(map(ord,list(decrypted)))
+	
+	for val in dtkey:
+		dtkey_packed += val
+		dtkey_packed = dtkey_packed << 8
+	dtkey_packed = dtkey_packed >> 8
+	dtkey_hex = ('%016x' % dtkey_packed)
+	
+	#print("Encrypted Title Key:",data)
+	#print("IV:", iv_key)
+	#print("Decrypted Title Key:", dtkey_hex.upper())
+	return dtkey,dtkey_hex 	
+	
+def loadContent(tmd,ckey,dkey):
+	title = tmd.tmd_contents[0].id
+	size = tmd.tmd_contents[0].size
+	
+	contentf = open(title, 'rb').read()
+	contentf = list(contentf)
+	
+	iv_key = list(map(ord, '\x00'*16))
+	
+	data = decryptData((contentf,dkey,iv_key))
+	data = list(map(ord, list(data)))
+
+	
+	fst = pytmd.FST_PARSER(data)
+	fst.ReadFST()
+	fst.GetFileListFromFST()
+	
+	return fst
+	
+def extractFiles(filedir,fst,tmd,ckey,dkey):
+
+	fe = fst.fe_entries
+	
+	rootdir = filedir + "\\" + tmd.tmd_title_id + "\\" + str(int(tmd.tmd_title_version,16))
+	dir_register = {}
+	os.chdir(rootdir)	
+	
+	
+	rd = fe[0].parent
+	rootpath = rootdir + '\\'+rd
+	if os.path.isdir(rootdir + '\\' + rd):
+		shutil.rmtree(rd)
+	
+	os.chdir(rootdir)
+	os.mkdir(rd)
+	os.chdir(rd)
+	dir_register[rd] = os.getcwd()
+	
+	print("Root set to:",rootpath)
+
+	for file in fe[1:]:
+		if file.type == 1:
+			par = file.parent
+			mydir = file.fn
+			nx = file.next
+			cwd = os.getcwd()
+			if par == rd:
+				os.chdir(rootpath)
+			if os.path.isdir(mydir):
+				os.mkdir(mydir)
+				os.chdir(mydir)
+				if dir_register.get(mydir) is None:
+					dir_register[dir] = os.getcwd()
+					print(" Created:",os.getcwd())
+			if os.getcwd().endswith(par):
+				os.mkdir(mydir)
+				os.chdir(mydir)
+				if dir_register.get(mydir) is None:
+					dir_register[mydir] = os.getcwd()
+					print(" Created:",os.getcwd())
+			else:
+				if dir_register.get(par):
+					newdir = dir_register[par]
+					os.chdir(newdir)
+					os.mkdir(mydir)
+					os.chdir(mydir)
+					if dir_register.get(mydir) is None:
+						dir_register[mydir] = os.getcwd()
+						print(" Created:",os.getcwd())
+					else:
+						if os.getcwd().endswith(par):
+							os.mkdir(mydir)
+							os.chdir(mydir)
+							if dir_register.get(mydir) is None:
+								dir_register[mydir] = os.getcwd()
+								print(" Created:", os.getcwd())
+							else:
+								print("Shit!!! I Must have more Recursion! To many layers on this Taco Dip", par, mydir, nx)
+		elif file.type == 0:
+			fn = file.fn
+			offset = file.f_off
+			size = file.f_len
+			inf = ''	
+			for t in tmd.tmd_contents:
+				if t.index == file.content_id:
+					#print("FOUND:", t.index, "ID:", t.index)
+					inf = t.id
+			print(" Extracting:", fn, )
+			
+			iv_key = list(map(ord, '\x00'*16))
+			iv_key[1] = file.content_id
+			
+			data = open(rootdir + "\\" + inf, 'rb')
+			
+			#Straight up lifed these calcs from Crediar
+			#I can't credit him again for the amazing work he did
+			d_size = 0x8000
+			
+			roffset = offset/ (d_size * d_size)
+			soffset = offset - (offset / d_size * d_size)
+			#################################################
+			data.seek(offset)
+			while size > 0:
+				encoded = data.read(d_size)
+				decoded = decryptData((encoded,dkey,iv_key))
+				decoded.lstrip('\x00')
+				open(fn, 'wb').write(bytes(decoded, 'utf-8'))
+				size -= d_size
+			data.close()
+			
+		else:
+			print("SHIT", file.type)
+
+def createPath(titleid,verdir,filedir):
+	if os.path.isdir(titleid):
+		os.chdir(titleid)
 	else:
-		os.mkdir(countrydir)
-		os.chdir(countrydir)
-	if os.path.isdir(verdir):
-		os.chdir(verdir)
+		os.mkdir(titleid)
+		os.chdir(titleid)
+	if verdir != None:								#If No version selected currently, its cool well fix it when we grab TMD file
+		if os.path.isdir(verdir):
+			os.chdir(verdir)
 		if len(os.listdir(os.getcwd())) > 0:
 			os.chdir('..')
 			shutil.rmtree(verdir)
-	os.mkdir(verdir)
-	os.chdir(verdir)
-	
-		
-    
-	print("Downloading", len(titles), "titles from NUS")
-	for t in titles:
-		print("Downloading: ", t)
-		url = r'http://nus.cdn.shop.wii.com/ccs/download/' + thistit + '/' + t
-		#	print("URL: ", url)
-		f= bytes(urllib.request.urlopen(url).read())
-		open(verdir + r'/' + t, 'wb' ).write(f)
-
-	if ver != None:
-		print(r'Downloading TMD tmd.' + ver)
-		tmdfile = urllib.request.urlopen(r'http://nus.cdn.shop.wii.com/ccs/download/' + thistit + '/tmd.' + ver)
-	else:
-		tmdfile = urllib.request.urlopen(r'http://nus.cdn.shop.wii.com/ccs/download/' + thistit + '/tmd')
-	
-	print(r'Downloading cetk')
-	cetk = urllib.request.urlopen(r'http://nus.cdn.shop.wii.com/ccs/download/' + thistit + '/cetk')
-
-	open(verdir + r'/' + 'tmd', 'wb').write(tmdfile.read())
-	open(verdir + r'/' + 'cetk', 'wb').write(cetk.read())
-	os.chdir(filedir)
-	return verdir
+		os.mkdir(verdir)
+		os.chdir(verdir)
+	return
    
-    
-print("""
-Data is pulled from Wii U Impersonator!
-Thanks to fail0verfl0w for their efforts!
-Thanks WulfySytlez and Bug_Checker_ for their patience
-Coded by Onion_Knight
-""")
+def main():
 
-
-
-if titleid.startswith('0005'):
-	repover = 'wiiu'
-elif titleid.startswith('00000007') or \
-	 titleid.startswith('00070002') or \
-	 titleid.startswith('00070008'):
-	repover = 'vwii'
-elif titleid.startswith('00000001') or \
-	 titleid.startswith('00010001') or \
-	 titleid.startswith('00010002') or \
-	 titleid.startswith('00010005') or \
-	 titleid.startswith('00010008'):
-	repover = 'wii'
-
-if repover == 'wii':
-		print("nuspy doesn't support wii title downloads")
-		exit()
+	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
+	titleid,c,ver =  getArgs()					#Parse CMDLINE Args and get results.  Currently c is deprecated 
+	keys = []
+	hex_keys = []
+	createPath(titleid,ver,filedir)				#Create our FilePath for the NUS Title 
+	downloadTMD(titleid,ver,"tmd")				#Download the tmd file
+	tmd, titles = parseTMD()
+	downloadTitles(titleid,titles)				
+	keys,hex_keys = loadTitleKeys(filedir)		#keys: encryptedTitle, common, title_iv
+	d_title_key, d_title_key_hex = decryptTitleKey(keys)
+	print("Decrypted Title Key:", d_title_key_hex.upper())
+	fst = loadContent(tmd,keys[1], d_title_key)
+	print("Reading Contents:")
+	print("Found " + str((len(fst.fe_entries))) + " files")
+	print("Extracting Files...\n")
+	extractFiles(filedir,fst,tmd,keys[1], d_title_key)
 	
-repo = r'http://wii.marcan.st/wiimpersonator/reports/' + repover + r'/' + c + r'/'
-
-print("Starting log find: ", titleid)
-print("Using Repo:", repo)
 
 
-
-#Grab Logs from Wii U Impersonator Repo
-
-wiiulogs = urllib.request.urlopen(repo)
-logs = wiiulogs.read().decode(encoding="utf-8")
-logs = re.findall('(?m)\<a href\=\"(.*log)?\"', logs)
-logs.reverse()
-
-#Loop through logs finding our Title
-
-print("\n")
-found = False
-for l in logs:
-	print("Searching log:", l)
-	m = findTitle(l, titleid.strip())
-	if m != None:
-		found = True
-		#print("FOUND: ",m[0], "VER:",m[1])	
-		if ver != None:
-			if m[1].strip() == ver.strip():
-				print("FOUND", m[0], m[1])
-				selectedtitle = m
-				break
-		elif ver == None :
-			print("No Version Detected")
-			selectedtitle = m
-			break
-
-if found == False:
-	print("Failed to locate title")
-	exit()
-   
-#Download Selected title and title IDs
-vdir = downloadTitle(selectedtitle)
-
-if repover is 'wiiu':
-	os.chdir(vdir)
-	subprocess.call(['CDecrypt.exe', 'tmd', 'cetk', '../../../ckey.bin'])
-	os.chdir(filedir)
+if __name__ == "__main__":
+	main()
