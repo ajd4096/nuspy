@@ -154,12 +154,7 @@ def downloadTMD(titleid,ver,fileid):
 			#print(dir(tmdfile))
 			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
 			print("No Version Selected, Found:",tmdver)
-			if os.path.isdir(tmdver):											#Have we downloaded this before?  If so we this block removes the whole thing
-				os.chdir(tmdver)
-				if len(os.listdir(os.getcwd())) > 0:
-					os.chdir('..')
-					shutil.rmtree(tmdver)
-			os.mkdir(tmdver)													#Create a new tmd version directory and get there.
+			os.makedirs(tmdver, exist_ok = True)													#Create a new tmd version directory and get there.
 			os.chdir(tmdver)
 			outf =  open('tmd', r'wb')
 			outf.write(tmdfile)
@@ -195,9 +190,12 @@ def downloadTitles(titleid,titles):
 		
 	for title in titles:
 		url = nus + titleid + r'/' + title
-		print("Downloading:", title)
-		f = bytes(urllib.request.urlopen(url).read())
-		open(title, 'wb').write(f)
+		if (os.path.isfile(title)):
+			print("Cached:", title)
+		else:
+			print("Downloading:", title)
+			f = bytes(urllib.request.urlopen(url).read())
+			open(title, 'wb').write(f)
 	f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
 	print("Downloading cetk")
 	open('cetk', 'wb').write(f)
@@ -394,12 +392,7 @@ def createPath(titleid,verdir,filedir):
 		os.mkdir(titleid)
 		os.chdir(titleid)
 	if verdir != None:								#If No version selected currently, its cool well fix it when we grab TMD file
-		if os.path.isdir(verdir):
-			os.chdir(verdir)
-		if len(os.listdir(os.getcwd())) > 0:
-			os.chdir('..')
-			shutil.rmtree(verdir)
-		os.mkdir(verdir)
+		os.makedirs(verdir, exist_ok = True)
 		os.chdir(verdir)
 	return
    
