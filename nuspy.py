@@ -210,7 +210,7 @@ def loadTitleKeys(rootdir):
 	cetkf = open('cetk', 'rb')
 	cetkf.seek(0x1bf,0)
 	cetk = cetkf.read(16)
-	ckey = open(rootdir + '\ckey.bin', 'rb').read(16)
+	ckey = open(os.path.join(rootdir, 'ckey.bin'), 'rb').read(16)
 	
 	tidkeyf = open('tmd', 'rb')
 	tidkeyf.seek(0x18c, 0)
@@ -295,14 +295,14 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 
 	fe = fst.fe_entries
 	
-	rootdir = filedir + "\\" + tmd.tmd_title_id + "\\" + str(int(tmd.tmd_title_version,16))
+	rootdir = os.path.join(filedir, tmd.tmd_title_id, str(int(tmd.tmd_title_version,16)))
 	dir_register = {}
 	os.chdir(rootdir)	
 	
 	
 	rd = fe[0].parent
-	rootpath = rootdir + '\\'+rd
-	if os.path.isdir(rootdir + '\\' + rd):
+	rootpath = os.path.join(rootdir, rd)
+	if os.path.isdir(rootpath):
 		shutil.rmtree(rd)
 	
 	os.chdir(rootdir)
@@ -364,7 +364,7 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 			iv_key = list(map(ord, '\x00'*16))
 			iv_key[1] = file.content_id
 			
-			data = open(rootdir + "\\" + inf, 'rb')
+			data = open(os.path.join(rootdir, inf), 'rb')
 			
 			#Straight up lifed these calcs from Crediar
 			#I can't credit him again for the amazing work he did
