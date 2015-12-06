@@ -378,7 +378,7 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 				encoded = data.read(d_size)
 				decoded = decryptData((encoded,dkey,iv_key))
 				decoded.lstrip('\x00')
-				open(fn, 'wb').write(bytes(decoded, 'utf-8'))
+				open(fn, 'ab').write(bytes(decoded, 'utf-8'))
 				size -= d_size
 			data.close()
 			
