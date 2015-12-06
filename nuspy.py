@@ -321,13 +321,13 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 			if par == rd:
 				os.chdir(rootpath)
 			if os.path.isdir(mydir):
-				os.mkdir(mydir)
+				os.makedirs(mydir, exist_ok = True)
 				os.chdir(mydir)
 				if dir_register.get(mydir) is None:
 					dir_register[dir] = os.getcwd()
 					print(" Created:",os.getcwd())
 			if os.getcwd().endswith(par):
-				os.mkdir(mydir)
+				os.makedirs(mydir, exist_ok = True)
 				os.chdir(mydir)
 				if dir_register.get(mydir) is None:
 					dir_register[mydir] = os.getcwd()
@@ -336,14 +336,14 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 				if dir_register.get(par):
 					newdir = dir_register[par]
 					os.chdir(newdir)
-					os.mkdir(mydir)
+					os.makedirs(mydir, exist_ok = True)
 					os.chdir(mydir)
 					if dir_register.get(mydir) is None:
 						dir_register[mydir] = os.getcwd()
 						print(" Created:",os.getcwd())
 					else:
 						if os.getcwd().endswith(par):
-							os.mkdir(mydir)
+							os.makedirs(mydir, exist_ok = True)
 							os.chdir(mydir)
 							if dir_register.get(mydir) is None:
 								dir_register[mydir] = os.getcwd()
