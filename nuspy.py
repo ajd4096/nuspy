@@ -147,6 +147,8 @@ dtkey = [] 			#Decrypted Title Key
 		
 
 def downloadTMD(titledir, titleid, ver):
+	cache_dir = os.path.join(titledir, 'cache')
+	os.makedirs(cache_dir, exist_ok = True)
 	
 	print("Downloading TMD for:",titleid)
 
@@ -157,7 +159,7 @@ def downloadTMD(titledir, titleid, ver):
 			#print(dir(tmdfile))
 			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
 			print("No Version Selected, Found:",tmdver)
-			outf =  open(os.path.join(titledir, 'tmd'), r'wb')
+			outf =  open(os.path.join(cache_dir, 'tmd'), r'wb')
 			outf.write(tmdfile)
 			outf.close()
 			ver = tmdver
@@ -166,23 +168,24 @@ def downloadTMD(titledir, titleid, ver):
 			tmdurl = nus + titleid + r'/tmd.'+ver
 			tmdfile = urllib.request.urlopen(tmdurl).read()
 			print("Writing TMD to file")
-			outf =  open(os.path.join(titledir, 'tmd.'+ver), r'wb')
+			outf =  open(os.path.join(cache_dir, 'tmd.'+ver), r'wb')
 			outf.write(tmdfile)
 			outf.close()
 
-			f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
-			print("Downloading cetk")
-			open(os.path.join(titledir, 'cetk'), 'wb').write(f)
+		print("Downloading cetk")
+		f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
+		open(os.path.join(cache_dir, 'cetk'), 'wb').write(f)
 
-			return ver
+		return ver
 
 	except Exception as e:
 		print("Exception:",e)
 		exit()
 # Find titles from REPO
 
-def parseTMD(titleid, ver):
-	tmd_path = os.path.join(titleid, 'tmd.' +ver)
+def parseTMD(titledir, ver):
+	cache_dir = os.path.join(titledir, 'cache')
+	tmd_path = os.path.join(cache_dir, 'tmd.' +ver)
 	if os.path.isfile(tmd_path):
 		tmd = pytmd.TMD_PARSER(tmd_path)
 		tmd.ReadContent()
@@ -196,10 +199,10 @@ def parseTMD(titleid, ver):
 		exit()
 	
 def downloadTitles(titledir, tmd):
-		
+	cache_dir = os.path.join(titledir, 'cache')
 	for content in tmd.tmd_contents:
 		url = nus + tmd.tmd_title_id + r'/' + content.id
-		filename = os.path.join(titledir, content.id)
+		filename = os.path.join(cache_dir, content.id)
 		# If we don't have the file or it is too small, download it
 		# FIXME: there are some titles where the file is larger than the tmd content.size.
 		# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
@@ -226,8 +229,9 @@ def downloadTitles(titledir, tmd):
 # Decrypt 00000000 -> 00000000.plain
 #
 def decryptContentFiles(titledir, tmd, ckey, dkey):
+	cache_dir = os.path.join(titledir, 'cache')
 	for content in tmd.tmd_contents:
-		filename = os.path.join(titledir, content.id)
+		filename = os.path.join(cache_dir, content.id)
 
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
 			print("Cached: %s.plain" % filename)
@@ -259,9 +263,10 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 # The hashes do not match any N * 1MB chunk starting from offset 0 of the content file (encrypted or plain)
 #
 def verifyContentHashes(titledir, tmd):
+	cache_dir = os.path.join(titledir, 'cache')
 	failed = False
 	for content in tmd.tmd_contents:
-		filename = os.path.join(titledir, content.id)
+		filename = os.path.join(cache_dir, content.id)
 
 		# If the type has a .h3, the TMD hash is of the .h3 file
 		# Otherwise it is the hash of the decrypted contents file
@@ -287,16 +292,17 @@ def verifyContentHashes(titledir, tmd):
 
 
 def loadTitleKeys(titledir, ver, ckey):
+	cache_dir = os.path.join(titledir, 'cache')
 	"""
 	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
 	Basically this is a python implementation of Crediar's CDecrypt.  He gets 
 	full credit for both demonstrating how this looks and where the encrypted Title ID.
 	"""
-	cetkf = open(os.path.join(titledir, 'cetk'), 'rb')
+	cetkf = open(os.path.join(cache_dir, 'cetk'), 'rb')
 	cetkf.seek(0x1bf,0)
 	cetk = cetkf.read(16)
 
-	tidkeyf = open(os.path.join(titledir, 'tmd.' +ver), 'rb')
+	tidkeyf = open(os.path.join(cache_dir, 'tmd.' +ver), 'rb')
 	tidkeyf.seek(0x18c, 0)
 	tidkey = tidkeyf.read(8) 
 	tidkey += b'\x00'*8
@@ -357,10 +363,11 @@ def decryptTitleKey(keys):
 	return dtkey,dtkey_hex 	
 	
 def loadContent(titledir, tmd,ckey,dkey):
+	cache_dir = os.path.join(titledir, 'cache')
 	title = tmd.tmd_contents[0].id
 	size = tmd.tmd_contents[0].size
 	
-	contentf = open(os.path.join(titledir, title), 'rb').read()
+	contentf = open(os.path.join(cache_dir, title), 'rb').read()
 	contentf = list(contentf)
 	
 	iv_key = list(map(ord, '\x00'*16))
@@ -376,6 +383,7 @@ def loadContent(titledir, tmd,ckey,dkey):
 	return fst
 
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
 	print("Creating:  ", currentdir)
 	if not os.path.isdir(currentdir):
@@ -394,6 +402,7 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	return fstindex
 
 def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
 
 	filename = os.path.join(currentdir, fe.fn)
@@ -405,7 +414,7 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	for t in tmd.tmd_contents:
 		if t.index == fe.content_id:
 			#print("FOUND:", t.index, "ID:", t.index)
-			input_filename = os.path.join(titledir, t.id + '.plain')
+			input_filename = os.path.join(cache_dir, t.id + '.plain')
 
 	#print("From", input_filename)
 	#print("Offset", offset, "size", size)
