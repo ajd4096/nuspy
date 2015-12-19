@@ -73,7 +73,7 @@ class TMD_PARSER(TMD_CONTENT):
 				tmd_cnt.index = struct.unpack('>H',self.file.read(2))[0]
 				tmd_cnt.type = struct.unpack('>H',self.file.read(2))[0]
 				tmd_cnt.size = struct.unpack('>Q',self.file.read(8))[0]
-				tmd_cnt.sha1_hash = struct.unpack('>32p',self.file.read(32))[0]
+				tmd_cnt.sha1_hash = struct.unpack('>32s',self.file.read(32))[0]
 				self.tmd_contents.append(tmd_cnt)
 		except Exception as e:
 			print(e)
