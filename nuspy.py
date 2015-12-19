@@ -144,12 +144,12 @@ tkey_iv = []		#Title Key IV
 dtkey = [] 			#Decrypted Title Key
 		
 
-def downloadTMD(titleid,ver,fileid):
+def downloadTMD(titleid,ver):
 	
 	print("Downloading TMD for:",titleid)
 
 	try:
-		if fileid == 'tmd' and ver == None:									#If No version selected currently, its cool well get it when we grab TMD file
+		if ver == None:									#If No version selected currently, its cool well get it when we grab TMD file
 			tmdurl = nus + titleid + r'/tmd'
 			tmdfile = bytes(urllib.request.urlopen(tmdurl).read())
 			#print(dir(tmdfile))
@@ -159,7 +159,7 @@ def downloadTMD(titleid,ver,fileid):
 			os.chdir(tmdver)
 			outf =  open('tmd', r'wb')
 			outf.write(tmdfile)
-		elif fileid == 'tmd' and ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
+		elif ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
 			tmdurl = urllib.request.urlopen(nus + titleid + r'tmd.'+ver)
 			tmdfile = urllib.request.urlopen(tmdurl).read()
 			print("Writing TMD to file")
@@ -404,7 +404,7 @@ def main():
 	keys = []
 	hex_keys = []
 	createPath(titleid,ver,filedir)				#Create our FilePath for the NUS Title 
-	downloadTMD(titleid,ver,"tmd")				#Download the tmd file
+	downloadTMD(titleid,ver)				#Download the tmd file
 	tmd, titles = parseTMD()
 	downloadTitles(titleid,titles)				
 	keys,hex_keys = loadTitleKeys(filedir)		#keys: encryptedTitle, common, title_iv
