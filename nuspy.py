@@ -123,7 +123,7 @@ def	downloadFileProgress(url, filename, expected_size):
 		sys.stdout.write("\rDownloading: %s %2d%%" % (url, percent))
 		sys.stdout.flush()
 	f.close()
-	sys.stdout.write("\rDownloading: %s done" % url)
+	sys.stdout.write("\rDownloading: %s done\n" % url)
 	sys.stdout.flush()
 
 
