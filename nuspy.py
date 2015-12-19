@@ -155,26 +155,31 @@ def downloadTMD(titleid,ver):
 			#print(dir(tmdfile))
 			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
 			print("No Version Selected, Found:",tmdver)
-			os.makedirs(tmdver, exist_ok = True)													#Create a new tmd version directory and get there.
-			os.chdir(tmdver)
-			outf =  open('tmd', r'wb')
+			os.makedirs(titleid, exist_ok = True)													#Create a new tmd version directory
+			outf =  open(os.path.join(titleid, 'tmd'), r'wb')
 			outf.write(tmdfile)
-		elif ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
-			tmdurl = urllib.request.urlopen(nus + titleid + r'tmd.'+ver)
+			outf.close()
+			ver = tmdver
+
+		if ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
+			tmdurl = nus + titleid + r'/tmd.'+ver
 			tmdfile = urllib.request.urlopen(tmdurl).read()
 			print("Writing TMD to file")
-			outf =  open('tmd', r'wb')
+			os.makedirs(titleid, exist_ok = True)													#Create a new tmd version directory
+			outf =  open(os.path.join(titleid, 'tmd.'+ver), r'wb')
 			outf.write(tmdfile)
-		outf.close()
-		return 
+			outf.close()
+			return ver
+
 	except Exception as e:
 		print("Exception:",e)
 		exit()
 # Find titles from REPO
 
-def parseTMD():
-	if os.path.isfile('tmd'):
-		tmd = pytmd.TMD_PARSER('tmd')
+def parseTMD(titleid, ver):
+	tmd_path = os.path.join(titleid, 'tmd.' +ver)
+	if os.path.isfile(tmd_path):
+		tmd = pytmd.TMD_PARSER(tmd_path)
 		tmd.ReadContent()
 		print("Parsing TMD for:", tmd.tmd_title_id)
 		print("Titles found:")
@@ -187,33 +192,34 @@ def parseTMD():
 		print("TMD File Not Found!")
 		exit()
 	
-def downloadTitles(titleid,titles):
+def downloadTitles(titleid, ver, titles):
 		
 	for title in titles:
 		url = nus + titleid + r'/' + title
-		if (os.path.isfile(title)):
+		filename = os.path.join(titleid, title)
+		if os.path.isfile(filename):
 			print("Cached:", title)
 		else:
 			print("Downloading:", title)
 			f = bytes(urllib.request.urlopen(url).read())
-			open(title, 'wb').write(f)
+			open(filename, 'wb').write(f)
 	f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
 	print("Downloading cetk")
-	open('cetk', 'wb').write(f)
+	open(os.path.join(titleid, 'cetk'), 'wb').write(f)
 	return
 
-def loadTitleKeys(rootdir):
+def loadTitleKeys(rootdir, titleid, ver):
 	"""
 	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
 	Basically this is a python implementation of Crediar's CDecrypt.  He gets 
 	full credit for both demonstrating how this looks and where the encrypted Title ID.
 	"""
-	cetkf = open('cetk', 'rb')
+	cetkf = open(os.path.join(rootdir, titleid, 'cetk'), 'rb')
 	cetkf.seek(0x1bf,0)
 	cetk = cetkf.read(16)
 	ckey = open(os.path.join(rootdir, 'ckey.bin'), 'rb').read(16)
 	
-	tidkeyf = open('tmd', 'rb')
+	tidkeyf = open(os.path.join(rootdir, titleid, 'tmd.' +ver), 'rb')
 	tidkeyf.seek(0x18c, 0)
 	tidkey = tidkeyf.read(8) 
 	tidkey += b'\x00'*8
@@ -273,11 +279,11 @@ def decryptTitleKey(keys):
 	#print("Decrypted Title Key:", dtkey_hex.upper())
 	return dtkey,dtkey_hex 	
 	
-def loadContent(tmd,ckey,dkey):
+def loadContent(filedir, titleid, tmd,ckey,dkey):
 	title = tmd.tmd_contents[0].id
 	size = tmd.tmd_contents[0].size
 	
-	contentf = open(title, 'rb').read()
+	contentf = open(os.path.join(filedir, titleid, title), 'rb').read()
 	contentf = list(contentf)
 	
 	iv_key = list(map(ord, '\x00'*16))
@@ -296,7 +302,7 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 
 	fe = fst.fe_entries
 	
-	rootdir = os.path.join(filedir, tmd.tmd_title_id, str(int(tmd.tmd_title_version,16)))
+	rootdir = os.path.join(filedir, tmd.tmd_title_id)
 	dir_register = {}
 	os.chdir(rootdir)	
 	
@@ -386,15 +392,9 @@ def extractFiles(filedir,fst,tmd,ckey,dkey):
 		else:
 			print("SHIT", file.type)
 
-def createPath(titleid,verdir,filedir):
-	if os.path.isdir(titleid):
-		os.chdir(titleid)
-	else:
-		os.mkdir(titleid)
-		os.chdir(titleid)
-	if verdir != None:								#If No version selected currently, its cool well fix it when we grab TMD file
-		os.makedirs(verdir, exist_ok = True)
-		os.chdir(verdir)
+def createPath(titleid,filedir):
+	if not os.path.isdir(titleid):
+		os.makedirs(titleid, exist_ok = True)
 	return
    
 def main():
@@ -403,19 +403,19 @@ def main():
 	titleid,c,ver =  getArgs()					#Parse CMDLINE Args and get results.  Currently c is deprecated 
 	keys = []
 	hex_keys = []
-	createPath(titleid,ver,filedir)				#Create our FilePath for the NUS Title 
-	downloadTMD(titleid,ver)				#Download the tmd file
-	tmd, titles = parseTMD()
-	downloadTitles(titleid,titles)				
-	keys,hex_keys = loadTitleKeys(filedir)		#keys: encryptedTitle, common, title_iv
+	createPath(titleid,filedir)				#Create our FilePath for the NUS Title
+	ver = downloadTMD(titleid,ver)				#Download the tmd file
+	tmd, titles = parseTMD(titleid, ver)
+	downloadTitles(titleid, ver, titles)
+	keys,hex_keys = loadTitleKeys(filedir, titleid, ver)		#keys: encryptedTitle, common, title_iv
 	d_title_key, d_title_key_hex = decryptTitleKey(keys)
 	print("Decrypted Title Key:", d_title_key_hex.upper())
-	fst = loadContent(tmd,keys[1], d_title_key)
+	fst = loadContent(filedir, titleid, tmd,keys[1], d_title_key)
 	print("Reading Contents:")
 	print("Found " + str((len(fst.fe_entries))) + " files")
 	print("Extracting Files...\n")
 	extractFiles(filedir,fst,tmd,keys[1], d_title_key)
-	
+
 
 
 if __name__ == "__main__":
