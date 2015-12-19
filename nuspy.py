@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 import sys, os, shutil, pytmd, struct, functools
 import urllib.request
