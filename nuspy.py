@@ -3,6 +3,7 @@
 import sys, os, shutil, pytmd, struct, functools
 import binascii
 import hashlib
+from optparse import OptionParser
 import urllib.request
 try:
 	#Completely borrowed the Cyrpto.Cipher idea from 
@@ -16,23 +17,6 @@ except ImportError:
 	useCrypto = False
 
 
-usage = """
-	nuspy.py <titleid>
-	nuspy.py <titleid> <country>
-	nuspy.py <titleid> <version>
-	nuspy.py <titleid> <country> <version> 
-	<country> options E/J/U  
-		****DEPRECATED SINCE I NO LONGER USE THE WII IMPERSONATOR 
-		****AND DON'T KNOW WHERE THE COUNTRY CHECK IS IN THE TMD. 
-		****IF YOU WANT A SPECIFIC COUNTRY CHECK THE LOGS AT THE 
-		****WII IMPERSONATOR AND SPECIFY THE TITLE AND VER
-		****http://wii.marcan.st/wiimpersonator/reports/wiiu/
-	<version> is base10 number and can be found at:
-		****http://wiiubrew.org/wiki/Title_database
-	Titleid is a mandatory field,used with or without the dash.
-	Version is optional and defaults to newest.
-	"""
-
 credits = """
 	Data is no longer pulled from Wii U Impersonator! Yay!
 	Data is now directly downloaded and parsed from the TMD ticket
@@ -42,95 +26,6 @@ credits = """
 	read, informative and documented well enough!
 	Coded by Onion_Knight
 	"""
-
-#Check argument for title, country and version...set defaults
-def getArgs():
-	if len(sys.argv) < 2 or len(sys.argv) > 4:
-
-		print(usage)
-		exit()
-	else:
-		if len(sys.argv) == 2:
-			titleid = sys.argv[1]
-			if titleid.find('-') == -1:
-				if len(titleid) != 16:
-					print(usage)
-				else:
-					titleid = titleid.lower()
-			elif titleid.find('-') > 0:
-				titleid = ''.join(titleid.split('-'))
-				titleid = titleid.lower()
-			else:
-				print(usage)
-				exit()
-
-			c = 'USA'
-			ver = None
-			
-			return [titleid,c,ver]
-		
-		elif len(sys.argv) == 3:
-			titleid = sys.argv[1]
-			if titleid.find('-') == -1:
-				if len(titleid) != 16:
-					print(usage)
-				else:
-					titleid = titleid.lower()
-			elif titleid.find('-') > 0:
-				titleid = ''.join(titleid.split('-'))
-				titleid = titleid.lower()
-			else:
-				print(usage)
-				exit()
-				
-			if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
-				c = sys.argv[2].lower()
-				if c == 'u':
-					c = 'USA'
-				elif c == 'j':
-					c = 'JPN'
-				elif c == 'e':
-					c = 'EUR'
-				ver = None
-			elif sys.argv[2].isdigit():
-				ver = str(sys.argv[2])
-				c = 'USA'
-			else:
-				print(usage)
-				exit()
-			return [titleid,c,ver]
-		elif len(sys.argv) == 4:
-			titleid = sys.argv[1]
-			if titleid.find('-') == -1:
-				if len(titleid) != 16:
-					print(usage)
-				else:
-					titleid = titleid.lower()
-			elif titleid.find('-') > 0:
-				titleid = ''.join(titleid).split('-')
-				titleid = titleid.lower()
-			else:
-				print(usage)
-				exit()
-				
-			if len(sys.argv[2]) == 1 and sys.argv[2].isalpha():
-				c = sys.argv[2].lower()
-				if c == 'u':
-					c = 'USA'
-				elif c == 'j':
-					c = 'JPN'
-				elif c == 'e':
-					c = 'EUR'
-			elif sys.argv[2].isdigit():
-				print(usage)
-				exit()
-
-			if  sys.argv[3].isdigit():
-				ver = str(sys.argv[3])
-			else:
-				print(usage)
-				exit()
-			return [titleid,c,ver]
 
 #Variables
 nus = r'http://nus.cdn.shop.wii.com/ccs/download/' 
@@ -449,33 +344,39 @@ def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
 
 def main():
 
+	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
+	parser.add_option('-v', '--version', dest='version', help='download VERSION or latest if not specified', metavar='VERSION')
+	(options, args) = parser.parse_args()
+
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
-	titleid,c,ver =  getArgs()					#Parse CMDLINE Args and get results.  Currently c is deprecated 
-	keys = []
-	hex_keys = []
+	ver = options.version
 
-	ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
+	for titleid in args:
+		keys = []
+		hex_keys = []
 
-	titledir = os.path.join(filedir, titleid)
-	os.makedirs(titledir, exist_ok = True)
+		ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
 
-	ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
-	tmd = parseTMD(titledir, ver)
-	keys,hex_keys = loadTitleKeys(titledir, ver, ckey)		#keys: encryptedTitle, common, title_iv
-	d_title_key, d_title_key_hex = decryptTitleKey(keys)
-	print("Decrypted Title Key:", d_title_key_hex.upper())
+		titledir = os.path.join(filedir, titleid)
+		os.makedirs(titledir, exist_ok = True)
 
-	downloadTitles(titledir, tmd)
+		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
+		tmd = parseTMD(titledir, ver)
+		keys,hex_keys = loadTitleKeys(titledir, ver, ckey)		#keys: encryptedTitle, common, title_iv
+		d_title_key, d_title_key_hex = decryptTitleKey(keys)
+		print("Decrypted Title Key:", d_title_key_hex.upper())
 
-	decryptContentFiles(titledir, tmd, ckey, d_title_key)
-	verifyContentHashes(titledir, tmd)
+		downloadTitles(titledir, tmd)
 
-	print("Reading Contents:")
-	fst = loadContent(titledir, tmd, keys[1], d_title_key)
-	print("Found " + str((len(fst.fe_entries))) + " files")
+		decryptContentFiles(titledir, tmd, ckey, d_title_key)
+		verifyContentHashes(titledir, tmd)
 
-	print("Extracting Files...\n")
-	extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
+		print("Reading Contents:")
+		fst = loadContent(titledir, tmd, keys[1], d_title_key)
+		print("Found " + str((len(fst.fe_entries))) + " files")
+
+		print("Extracting Files...\n")
+		extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
 
 
 
