@@ -146,7 +146,7 @@ tkey_iv = []		#Title Key IV
 dtkey = [] 			#Decrypted Title Key
 		
 
-def downloadTMD(titleid,ver):
+def downloadTMD(titledir, titleid, ver):
 	
 	print("Downloading TMD for:",titleid)
 
@@ -157,8 +157,7 @@ def downloadTMD(titleid,ver):
 			#print(dir(tmdfile))
 			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
 			print("No Version Selected, Found:",tmdver)
-			os.makedirs(titleid, exist_ok = True)													#Create a new tmd version directory
-			outf =  open(os.path.join(titleid, 'tmd'), r'wb')
+			outf =  open(os.path.join(titledir, 'tmd'), r'wb')
 			outf.write(tmdfile)
 			outf.close()
 			ver = tmdver
@@ -167,14 +166,13 @@ def downloadTMD(titleid,ver):
 			tmdurl = nus + titleid + r'/tmd.'+ver
 			tmdfile = urllib.request.urlopen(tmdurl).read()
 			print("Writing TMD to file")
-			os.makedirs(titleid, exist_ok = True)													#Create a new tmd version directory
-			outf =  open(os.path.join(titleid, 'tmd.'+ver), r'wb')
+			outf =  open(os.path.join(titledir, 'tmd.'+ver), r'wb')
 			outf.write(tmdfile)
 			outf.close()
 
 			f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
 			print("Downloading cetk")
-			open(os.path.join(titleid, 'cetk'), 'wb').write(f)
+			open(os.path.join(titledir, 'cetk'), 'wb').write(f)
 
 			return ver
 
@@ -197,11 +195,11 @@ def parseTMD(titleid, ver):
 		print("TMD File Not Found!")
 		exit()
 	
-def downloadTitles(filedir, titleid, tmd):
+def downloadTitles(titledir, tmd):
 		
 	for content in tmd.tmd_contents:
 		url = nus + tmd.tmd_title_id + r'/' + content.id
-		filename = os.path.join(filedir, titleid, content.id)
+		filename = os.path.join(titledir, content.id)
 		# If we don't have the file or it is too small, download it
 		# FIXME: there are some titles where the file is larger than the tmd content.size.
 		# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
@@ -227,9 +225,9 @@ def downloadTitles(filedir, titleid, tmd):
 #
 # Decrypt 00000000 -> 00000000.plain
 #
-def decryptContentFiles(filedir, titleid, tmd, ckey, dkey):
+def decryptContentFiles(titledir, tmd, ckey, dkey):
 	for content in tmd.tmd_contents:
-		filename = os.path.join(filedir, titleid, content.id)
+		filename = os.path.join(titledir, content.id)
 
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
 			print("Cached: %s.plain" % filename)
@@ -256,10 +254,10 @@ def decryptContentFiles(filedir, titleid, tmd, ckey, dkey):
 # Validate hashes of title.plain, title.h3
 # FIXME - verify the hashes in the .h3 file
 #
-def verifyContentHashes(filedir, titleid, tmd):
+def verifyContentHashes(titledir, tmd):
 	failed = False
 	for content in tmd.tmd_contents:
-		filename = os.path.join(filedir, titleid, content.id)
+		filename = os.path.join(titledir, content.id)
 
 		# If the type has a .h3, the TMD hash is of the .h3 file
 		# Otherwise it is the hash of the decrypted contents file
@@ -284,18 +282,17 @@ def verifyContentHashes(filedir, titleid, tmd):
 		exit(1)
 
 
-def loadTitleKeys(rootdir, titleid, ver):
+def loadTitleKeys(titledir, ver, ckey):
 	"""
 	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
 	Basically this is a python implementation of Crediar's CDecrypt.  He gets 
 	full credit for both demonstrating how this looks and where the encrypted Title ID.
 	"""
-	cetkf = open(os.path.join(rootdir, titleid, 'cetk'), 'rb')
+	cetkf = open(os.path.join(titledir, 'cetk'), 'rb')
 	cetkf.seek(0x1bf,0)
 	cetk = cetkf.read(16)
-	ckey = open(os.path.join(rootdir, 'ckey.bin'), 'rb').read(16)
-	
-	tidkeyf = open(os.path.join(rootdir, titleid, 'tmd.' +ver), 'rb')
+
+	tidkeyf = open(os.path.join(titledir, 'tmd.' +ver), 'rb')
 	tidkeyf.seek(0x18c, 0)
 	tidkey = tidkeyf.read(8) 
 	tidkey += b'\x00'*8
@@ -355,11 +352,11 @@ def decryptTitleKey(keys):
 	#print("Decrypted Title Key:", dtkey_hex.upper())
 	return dtkey,dtkey_hex 	
 	
-def loadContent(filedir, titleid, tmd,ckey,dkey):
+def loadContent(titledir, tmd,ckey,dkey):
 	title = tmd.tmd_contents[0].id
 	size = tmd.tmd_contents[0].size
 	
-	contentf = open(os.path.join(filedir, titleid, title), 'rb').read()
+	contentf = open(os.path.join(titledir, title), 'rb').read()
 	contentf = list(contentf)
 	
 	iv_key = list(map(ord, '\x00'*16))
@@ -373,129 +370,99 @@ def loadContent(filedir, titleid, tmd,ckey,dkey):
 	fst.GetFileListFromFST()
 	
 	return fst
-	
-def extractFiles(filedir,fst,tmd,ckey,dkey):
 
-	fe = fst.fe_entries
-	
-	rootdir = os.path.join(filedir, tmd.tmd_title_id)
-	dir_register = {}
-	os.chdir(rootdir)	
-	
-	
-	rd = fe[0].parent
-	rootpath = os.path.join(rootdir, rd)
-	if os.path.isdir(rootpath):
-		shutil.rmtree(rd)
-	
-	os.chdir(rootdir)
-	os.mkdir(rd)
-	os.chdir(rd)
-	dir_register[rd] = os.getcwd()
-	
-	print("Root set to:",rootpath)
+def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	fe = fst.fe_entries[fstindex]
+	print("Creating:  ", currentdir)
+	if not os.path.isdir(currentdir):
+		os.makedirs(currentdir)
 
-	for file in fe[1:]:
-		if file.type == 1:
-			par = file.parent
-			mydir = file.fn
-			nx = file.next
-			cwd = os.getcwd()
-			if par == rd:
-				os.chdir(rootpath)
-			if os.path.isdir(mydir):
-				os.makedirs(mydir, exist_ok = True)
-				os.chdir(mydir)
-				if dir_register.get(mydir) is None:
-					dir_register[dir] = os.getcwd()
-					print(" Created:",os.getcwd())
-			if os.getcwd().endswith(par):
-				os.makedirs(mydir, exist_ok = True)
-				os.chdir(mydir)
-				if dir_register.get(mydir) is None:
-					dir_register[mydir] = os.getcwd()
-					print(" Created:",os.getcwd())
-			else:
-				if dir_register.get(par):
-					newdir = dir_register[par]
-					os.chdir(newdir)
-					os.makedirs(mydir, exist_ok = True)
-					os.chdir(mydir)
-					if dir_register.get(mydir) is None:
-						dir_register[mydir] = os.getcwd()
-						print(" Created:",os.getcwd())
-					else:
-						if os.getcwd().endswith(par):
-							os.makedirs(mydir, exist_ok = True)
-							os.chdir(mydir)
-							if dir_register.get(mydir) is None:
-								dir_register[mydir] = os.getcwd()
-								print(" Created:", os.getcwd())
-							else:
-								print("Shit!!! I Must have more Recursion! To many layers on this Taco Dip", par, mydir, nx)
-		elif file.type == 0:
-			fn = file.fn
-			offset = file.f_off
-			size = file.f_len
-			inf = ''	
-			for t in tmd.tmd_contents:
-				if t.index == file.content_id:
-					#print("FOUND:", t.index, "ID:", t.index)
-					inf = t.id
-			print(" Extracting:", fn, )
-			
-			iv_key = list(map(ord, '\x00'*16))
-			iv_key[1] = file.content_id
-			
-			data = open(os.path.join(rootdir, inf), 'rb')
-			
-			#Straight up lifed these calcs from Crediar
-			#I can't credit him again for the amazing work he did
-			d_size = 0x8000
-			
-			roffset = offset/ (d_size * d_size)
-			soffset = offset - (offset / d_size * d_size)
-			#################################################
-			data.seek(offset)
-			while size > 0:
-				encoded = data.read(d_size)
-				decoded = decryptData((encoded,dkey,iv_key))
-				decoded.lstrip('\x00')
-				open(fn, 'ab').write(bytes(decoded, 'utf-8'))
-				size -= d_size
-			data.close()
-			
+	while (fstindex + 1 < fe.f_len):
+		nextfe = fst.fe_entries[fstindex + 1]
+		if (nextfe.type == 1 or nextfe.type == 129):
+			fstindex = extractFstDirectory(titledir, fst, tmd, ckey, dkey, os.path.join(currentdir, nextfe.fn), fstindex + 1)
+		elif (nextfe.type == 0 or nextfe.type == 128):
+			extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex + 1)
+			fstindex += 1
 		else:
-			print("SHIT", file.type)
+			print("Unknown FST Entry type %d" % nextfe.type)
+			fstindex += 1
+	return fstindex
 
-def createPath(titleid,filedir):
-	if not os.path.isdir(titleid):
-		os.makedirs(titleid, exist_ok = True)
-	return
-   
+def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	fe = fst.fe_entries[fstindex]
+
+	filename = os.path.join(currentdir, fe.fn)
+	print("Extracting:", filename)
+
+	offset = fe.f_off
+	size = fe.f_len
+	input_filename = ''
+	for t in tmd.tmd_contents:
+		if t.index == fe.content_id:
+			#print("FOUND:", t.index, "ID:", t.index)
+			input_filename = os.path.join(titledir, t.id + '.plain')
+
+	#print("From", input_filename)
+	#print("Offset", offset, "size", size)
+	if (not os.path.isfile(input_filename)):
+		print('Decrypted file missing', input_filename)
+		return
+
+	input_file = open(input_filename, 'rb')
+	input_file.seek(offset)
+
+	output_file = open(filename, 'wb')
+
+	# Copy the data in chunks (some files are big compared to memory size)
+	chunk_size = 1024 * 1024
+	while size > 0:
+		data = input_file.read(chunk_size)
+		if (size < chunk_size):
+			output_file.write(data[:size])
+		else:
+			output_file.write(data)
+		size -= chunk_size
+	output_file.close()
+	input_file.close()
+
+def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
+	rootdir = os.path.join(titledir, 'extracted.' + ver)
+	# Start with a clean dir
+	if (os.path.exists(rootdir)):
+		shutil.rmtree(rootdir)
+	# Start with the root dir at index 0
+	extractFstDirectory(titledir, fst, tmd, ckey, dkey, rootdir, 0)
+
 def main():
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
 	titleid,c,ver =  getArgs()					#Parse CMDLINE Args and get results.  Currently c is deprecated 
 	keys = []
 	hex_keys = []
-	createPath(titleid,filedir)				#Create our FilePath for the NUS Title
-	ver = downloadTMD(titleid,ver)				#Download the tmd file
-	tmd = parseTMD(titleid, ver)
-	downloadTitles(filedir, titleid, tmd)
-	keys,hex_keys = loadTitleKeys(filedir, titleid, ver)		#keys: encryptedTitle, common, title_iv
+
+	ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
+
+	titledir = os.path.join(filedir, titleid)
+	os.makedirs(titledir, exist_ok = True)
+
+	ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
+	tmd = parseTMD(titledir, ver)
+	keys,hex_keys = loadTitleKeys(titledir, ver, ckey)		#keys: encryptedTitle, common, title_iv
 	d_title_key, d_title_key_hex = decryptTitleKey(keys)
 	print("Decrypted Title Key:", d_title_key_hex.upper())
 
-	ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
-	decryptContentFiles(filedir, titleid, tmd, ckey, d_title_key)
-	verifyContentHashes(filedir, titleid, tmd)
+	downloadTitles(titledir, tmd)
 
-	fst = loadContent(filedir, titleid, tmd,keys[1], d_title_key)
+	decryptContentFiles(titledir, tmd, ckey, d_title_key)
+	verifyContentHashes(titledir, tmd)
+
 	print("Reading Contents:")
+	fst = loadContent(titledir, tmd, keys[1], d_title_key)
 	print("Found " + str((len(fst.fe_entries))) + " files")
+
 	print("Extracting Files...\n")
-	extractFiles(filedir,fst,tmd,keys[1], d_title_key)
+	extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
 
 
 
