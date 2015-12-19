@@ -369,16 +369,62 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 
 def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
 	rootdir = os.path.join(titledir, 'extracted.' + ver)
+
 	# Start with a clean dir
 	if (os.path.exists(rootdir)):
 		shutil.rmtree(rootdir)
+
+	print("Extracting files into %s" % rootdir)
+
 	# Start with the root dir at index 0
 	extractFstDirectory(titledir, fst, tmd, ckey, dkey, rootdir, 0)
+
+def	packageForWUP(titledir, ver, tmd, keys):
+	cache_dir = os.path.join(titledir, 'cache')
+	packagedir = os.path.join(titledir, 'install.' + ver)
+
+	# Start with a clean dir
+	if (os.path.isdir(packagedir)):
+		shutil.rmtree(packagedir)
+	os.makedirs(packagedir, exist_ok = True)
+
+	print("Packaging files for WUP installer into %s" % packagedir)
+
+	# Copy our tmd, cetk files
+	print("Copying: title.tmd")
+	shutil.copy(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
+	print("Copying: title.tik")
+	shutil.copy(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
+
+	# Copy the certs from the tmd, cetk files
+	print("Creating: title.cert")
+	t = open(os.path.join(packagedir, 'title.tmd'), 'rb').read()
+	c = open(os.path.join(packagedir, 'title.tik'), 'rb').read()
+	f = open(os.path.join(packagedir, 'title.cert'), 'wb')
+	# FIXME - parse the files instead of using hard-coded offsets
+	# See 3DS docs for details
+	f.write(c[0x650 : 0x650 + 0x400])
+	f.write(t[0x1224 : 0x1224 + 0x300])
+	f.write(c[0x350 : 0x350 + 0x300])
+	f.close()
+
+	# Copy the encrypted content files
+	for content in tmd.tmd_contents:
+		filename = content.id
+
+		print("Copying: %s" % filename)
+		shutil.copy(os.path.join(cache_dir, filename),       os.path.join(packagedir, filename + '.app'))
+		# If the content has a .h3, copy that too
+		if (content.type & 0x02):
+			print("Copying: %s" % filename + '.h3')
+			shutil.copy(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
 def main():
 
 	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
 	parser.add_option('-v', '--version', dest='version', help='download VERSION or latest if not specified', metavar='VERSION')
+	parser.add_option('-e', '--extract', dest='extract', help='extract content', action='store_true', default=False)
+	parser.add_option('-w', '--wup',     dest='wup',     help='pack for WUP installer', action='store_true', default=False)
 	(options, args) = parser.parse_args()
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
@@ -399,17 +445,21 @@ def main():
 		d_title_key, d_title_key_hex = decryptTitleKey(keys)
 		print("Decrypted Title Key:", d_title_key_hex.upper())
 
-		downloadTitles(titledir, tmd)
+		if (options.wup):
+			downloadTitles(titledir, tmd)
+			packageForWUP(titledir, ver, tmd, keys)
 
-		decryptContentFiles(titledir, tmd, ckey, d_title_key)
-		verifyContentHashes(titledir, tmd)
+		if (options.extract):
+			downloadTitles(titledir, tmd)
 
-		print("Reading Contents:")
-		fst = loadContent(titledir, tmd, keys[1], d_title_key)
-		print("Found " + str((len(fst.fe_entries))) + " files")
+			decryptContentFiles(titledir, tmd, ckey, d_title_key)
+			verifyContentHashes(titledir, tmd)
 
-		print("Extracting Files...\n")
-		extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
+			print("Reading Contents:")
+			fst = loadContent(titledir, tmd, keys[1], d_title_key)
+			print("Found " + str((len(fst.fe_entries))) + " files")
+
+			extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
 
 
 
