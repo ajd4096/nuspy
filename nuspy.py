@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import sys, os, shutil, pytmd, struct, functools
+import binascii
+import hashlib
 import urllib.request
 try:
 	#Completely borrowed the Cyrpto.Cipher idea from 
@@ -222,6 +224,66 @@ def downloadTitles(filedir, titleid, tmd):
 
 	return
 
+#
+# Decrypt 00000000 -> 00000000.plain
+#
+def decryptContentFiles(filedir, titleid, tmd, ckey, dkey):
+	for content in tmd.tmd_contents:
+		filename = os.path.join(filedir, titleid, content.id)
+
+		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
+			print("Cached: %s.plain" % filename)
+		else:
+			print("Decrypting: %s" % filename)
+
+			iv_key = list(map(ord, '\x00'*16))
+			iv_key[0] = content.index >> 8
+			iv_key[1] = content.index
+
+			# Read the encrypted file
+			encrypted_data = open(filename, 'rb').read()
+
+			# Pad up to 16
+			if ((len(encrypted_data) % 16) != 0):
+				encrypted_data += b'\x00' * (16 - (len(encrypted_data) % 16))
+
+			decrypted_data = decryptData((encrypted_data, dkey, iv_key)).encode('latin-1')
+
+			# Write the decrypted file.plain
+			open(filename + ".plain", "wb").write(decrypted_data)
+
+#
+# Validate hashes of title.plain, title.h3
+# FIXME - verify the hashes in the .h3 file
+#
+def verifyContentHashes(filedir, titleid, tmd):
+	failed = False
+	for content in tmd.tmd_contents:
+		filename = os.path.join(filedir, titleid, content.id)
+
+		# If the type has a .h3, the TMD hash is of the .h3 file
+		# Otherwise it is the hash of the decrypted contents file
+		if (content.type & 0x02):
+			filename += ".h3"
+		else:
+			filename += ".plain"
+
+		print("Checking %s" % filename)
+
+		# Only checksum the content.size
+		found = hashlib.sha1(open(filename, "rb").read()[:content.size]).hexdigest()
+
+		expected = binascii.hexlify(content.sha1_hash[:20]).decode('utf-8')
+
+		if (found != expected):
+			print("Checksum failed for %s!" % filename)
+			print("Expected: %s" % expected)
+			print("Found: %s" % found)
+			failed = True
+	if failed:
+		exit(1)
+
+
 def loadTitleKeys(rootdir, titleid, ver):
 	"""
 	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
@@ -424,6 +486,11 @@ def main():
 	keys,hex_keys = loadTitleKeys(filedir, titleid, ver)		#keys: encryptedTitle, common, title_iv
 	d_title_key, d_title_key_hex = decryptTitleKey(keys)
 	print("Decrypted Title Key:", d_title_key_hex.upper())
+
+	ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
+	decryptContentFiles(filedir, titleid, tmd, ckey, d_title_key)
+	verifyContentHashes(filedir, titleid, tmd)
+
 	fst = loadContent(filedir, titleid, tmd,keys[1], d_title_key)
 	print("Reading Contents:")
 	print("Found " + str((len(fst.fe_entries))) + " files")
