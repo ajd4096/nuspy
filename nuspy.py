@@ -254,6 +254,10 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 # Validate hashes of title.plain, title.h3
 # FIXME - verify the hashes in the .h3 file
 #
+# The .h3 seems to be 1 or more 20-byte hash, with one hash for each 256M?
+# The hashes are not stored in the content file (encrypted or plain)
+# The hashes do not match any N * 1MB chunk starting from offset 0 of the content file (encrypted or plain)
+#
 def verifyContentHashes(titledir, tmd):
 	failed = False
 	for content in tmd.tmd_contents:
