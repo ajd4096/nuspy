@@ -48,28 +48,34 @@ def downloadTMD(titledir, titleid, ver):
 	print("Downloading TMD for:",titleid)
 
 	try:
-		if ver == None:									#If No version selected currently, its cool well get it when we grab TMD file
-			tmdurl = nus + titleid + r'/tmd'
-			tmdfile = bytes(urllib.request.urlopen(tmdurl).read())
-			#print(dir(tmdfile))
-			tmdver = str((tmdfile[0x1DC] << 8) + tmdfile[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
+		if ver == None:
+			# No version specified, grab the latest (versionless tmd file)
+			url = nus + titleid + r'/tmd'
+			file = os.path.join(cache_dir, 'tmd')
+			print("Downloading: %s" % url)
+			urllib.request.urlretrieve(url, file)
+
+			data = open(file, 'rb').read()
+			tmdver = str((data[0x1DC] << 8) + data[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
 			print("No Version Selected, Found:",tmdver)
-			outf =  open(os.path.join(cache_dir, 'tmd'), r'wb')
-			outf.write(tmdfile)
-			outf.close()
 			ver = tmdver
 
-		if ver != None:									#In this instance we have version specified so we are n the right directory, yay small block
-			tmdurl = nus + titleid + r'/tmd.'+ver
-			tmdfile = urllib.request.urlopen(tmdurl).read()
-			print("Writing TMD to file")
-			outf =  open(os.path.join(cache_dir, 'tmd.'+ver), r'wb')
-			outf.write(tmdfile)
-			outf.close()
+		if ver != None:
+			url = nus + titleid + r'/tmd.'+ver
+			file = os.path.join(cache_dir, 'tmd.' + ver)
+			if os.path.isfile(file):
+				print("Cached: %s" % file)
+			else:
+				print("Downloading: %s" % url)
+				urllib.request.urlretrieve(url, file)
 
-		print("Downloading cetk")
-		f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
-		open(os.path.join(cache_dir, 'cetk'), 'wb').write(f)
+		url = nus + titleid + r'/cetk'
+		file = os.path.join(cache_dir, 'cetk')
+		if os.path.isfile(file):
+			print("Cached: %s" % file)
+		else:
+			print("Downloading: %s" % url)
+			urllib.request.urlretrieve(url, file)
 
 		return ver
 
@@ -92,7 +98,35 @@ def parseTMD(titledir, ver):
 	else:
 		print("TMD File Not Found!")
 		exit()
-	
+
+#
+# Download URL to FILE, and show progress in %
+#
+def	downloadFileProgress(url, filename, expected_size):
+	req = urllib.request.Request(url)
+	if os.path.isfile(filename):
+		file_size = os.path.getsize(filename)
+		req.headers['Range'] = 'bytes=%s-' % file_size
+	else:
+		file_size = 0
+	sys.stdout.write("Downloading: %s ..." % url)
+	u = urllib.request.urlopen(req)
+	f = open(filename, 'ab')
+	while True:
+		data = u.read(1024*1024)
+		if not data:
+			break
+		f.write(data)
+		f.flush()
+		file_size += len(data)
+		percent = 100 * file_size // expected_size
+		sys.stdout.write("\rDownloading: %s %2d%%" % (url, percent))
+		sys.stdout.flush()
+	f.close()
+	sys.stdout.write("\rDownloading: %s done" % url)
+	sys.stdout.flush()
+
+
 def downloadTitles(titledir, tmd):
 	cache_dir = os.path.join(titledir, 'cache')
 	for content in tmd.tmd_contents:
@@ -104,8 +138,7 @@ def downloadTitles(titledir, tmd):
 		if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
 			print("Cached:", url)
 		else:
-			print("Downloading:", url)
-			urllib.request.urlretrieve(url, filename)
+			downloadFileProgress(url, filename, content.size)
 
 		# Fetch the .h3 files
 		# We don't know the size, but they are only small (20 or 40 bytes)
