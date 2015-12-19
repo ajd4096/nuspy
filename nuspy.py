@@ -169,6 +169,11 @@ def downloadTMD(titleid,ver):
 			outf =  open(os.path.join(titleid, 'tmd.'+ver), r'wb')
 			outf.write(tmdfile)
 			outf.close()
+
+			f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
+			print("Downloading cetk")
+			open(os.path.join(titleid, 'cetk'), 'wb').write(f)
+
 			return ver
 
 	except Exception as e:
@@ -183,29 +188,38 @@ def parseTMD(titleid, ver):
 		tmd.ReadContent()
 		print("Parsing TMD for:", tmd.tmd_title_id)
 		print("Titles found:")
-		titles = []
 		for title in tmd.tmd_contents:
 			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
-			titles.append(title.id)
-		return (tmd,titles)
+		return tmd
 	else:
 		print("TMD File Not Found!")
 		exit()
 	
-def downloadTitles(titleid, ver, titles):
+def downloadTitles(filedir, titleid, tmd):
 		
-	for title in titles:
-		url = nus + titleid + r'/' + title
-		filename = os.path.join(titleid, title)
-		if os.path.isfile(filename):
-			print("Cached:", title)
+	for content in tmd.tmd_contents:
+		url = nus + tmd.tmd_title_id + r'/' + content.id
+		filename = os.path.join(filedir, titleid, content.id)
+		# If we don't have the file or it is too small, download it
+		# FIXME: there are some titles where the file is larger than the tmd content.size.
+		# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
+		if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
+			print("Cached:", url)
 		else:
-			print("Downloading:", title)
-			f = bytes(urllib.request.urlopen(url).read())
-			open(filename, 'wb').write(f)
-	f = bytes(urllib.request.urlopen(nus + titleid + r'/cetk').read())
-	print("Downloading cetk")
-	open(os.path.join(titleid, 'cetk'), 'wb').write(f)
+			print("Downloading:", url)
+			urllib.request.urlretrieve(url, filename)
+
+		# Fetch the .h3 files
+		# We don't know the size, but they are only small (20 or 40 bytes)
+		if (content.type & 0x02):
+			url += '.h3'
+			filename += '.h3'
+			if (os.path.isfile(filename)):
+				print("Cached:", url)
+			else:
+				print("Downloading:", url)
+				urllib.request.urlretrieve(url, filename)
+
 	return
 
 def loadTitleKeys(rootdir, titleid, ver):
@@ -405,8 +419,8 @@ def main():
 	hex_keys = []
 	createPath(titleid,filedir)				#Create our FilePath for the NUS Title
 	ver = downloadTMD(titleid,ver)				#Download the tmd file
-	tmd, titles = parseTMD(titleid, ver)
-	downloadTitles(titleid, ver, titles)
+	tmd = parseTMD(titleid, ver)
+	downloadTitles(filedir, titleid, tmd)
 	keys,hex_keys = loadTitleKeys(filedir, titleid, ver)		#keys: encryptedTitle, common, title_iv
 	d_title_key, d_title_key_hex = decryptTitleKey(keys)
 	print("Decrypted Title Key:", d_title_key_hex.upper())
