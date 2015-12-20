@@ -3,6 +3,10 @@ import struct, functools, ctypes
 import binascii
 import hashlib
 
+WiiUCommenDevKey = b'\x2F\x5C\x1B\x29\x44\xE7\xFD\x6F\xC3\x97\x96\x4B\x05\x76\x91\xFA'
+wiiu_common_key = b'\xD7\xB0\x04\x02\x65\x9B\xA2\xAB\xD2\xCB\x0D\xB2\x7F\xA2\xB6\x56'
+
+
 def	get_signature_type(key, value):
 	# Taken from http://www.3dbrew.org/wiki/Title_metadata
 	signature_types = (
@@ -16,9 +20,20 @@ def	get_signature_type(key, value):
 	for t in signature_types:
 		if t[key] == value:
 			return t
+	print(key, value)
 	assert False, "Unrecognised signature type"
 
-class unpacker(object):
+class	buffer_packer():
+	def __init__(self):
+		self._buffer = []
+
+	def __call__(self, fmt, data):
+		self._buffer += struct.pack(fmt, data)
+
+	def	tell(self):
+		return len(self._buffer)
+
+class	buffer_unpacker():
 	def __init__(self, buffer):
 		self._buffer = buffer
 		self._offset = 0
@@ -28,13 +43,54 @@ class unpacker(object):
 		self._offset += struct.calcsize(fmt)
 		return result
 
+	def	iseof(self):
+		if self._offset >= len(self._buffer):
+			return True
+		return False
+
 	def	seek(self, offset):
-		if (offset < len(self._buffer)):
+		if offset >= 0 and offset < len(self._buffer):
 			self._offset = offset
 		return self._offset
 
 	def	tell(self):
 		return self._offset
+
+class	SIGNATURE():
+	def	__init__(self):
+		self.sig_type		= 0
+		self.sig		= []
+		self.padding1		= []
+
+	def	__str__(self):
+		o = ''
+		o += '{ sig\n'
+		st = get_signature_type('value', self.sig_type)
+		if st:
+			o += "Sig Type: %s\n" % st['name']
+			o += "Sig Size: 0x%X\n" % st['size']
+		o += '} sig\n'
+		return o
+
+	def	get_length(self):
+		st = get_signature_type('value', self.sig_type)
+		if st:
+			return st['size']
+
+	def	get_padding(self):
+		st = get_signature_type('value', self.sig_type)
+		if st:
+			return st['padding']
+
+	def	pack(self, packer):
+		packer('>I', self.sig_type)
+		packer('>%ds' % self.get_length(), self.signature)
+		packer('>%ds' % self.get_padding(), self.padding)
+
+	def	unpack(self, unpacker):
+		self.sig_type		= unpacker('>I')[0]
+		self.signature		= unpacker('>%ds' % self.get_length())[0]
+		self.padding		= unpacker('>%ds' % self.get_padding())[0]
 
 class TMD_CONTENT():
 	def __init__(self):
@@ -44,6 +100,144 @@ class TMD_CONTENT():
 		self.size = 0
 		self.sha1_hash = []
 	
+	def	pack(self, packer):
+		packer('>I',	int.from_bytes(self.id, 16))
+		packer('>H',	self.index)
+		packer('>H',	self.type)
+		packer('>Q',	self.size)
+		packer('>32s',	self.sha1_hash)
+
+	def	unpack(self, unpacker):
+		self.id		= '%08x' % unpacker('>I')[0]
+		self.index	= unpacker('>H')[0]
+		self.type	= unpacker('>H')[0]
+		self.size	= unpacker('>Q')[0]
+		self.sha1_hash	= unpacker('>32s')[0]
+
+class	TMD_CERT():
+	def	__init__(self):
+		self.signature		= SIGNATURE()
+		self.issuer		= ''
+		self.tag		= 0
+		self.name		= ''
+		self.key		= ''
+
+	def	__str__(self):
+		o = ''
+		o += '{ cert\n'
+		o += str(self.signature)
+		o += "Name: %s\n" % self.name
+		o += "Issuer: %s\n" % self.issuer
+		o += "Tag: 0x%X\n" % self.tag
+		o += '} cert\n'
+		return o
+
+	def	pack(self, packer):
+		self.signature.pack(packer)
+		packer('>64s',		self.issuer)
+		packer('>I',		self.tag)
+		packer('>64s',		self.name)
+		packer('>316s',		self.key)
+
+	def	unpack(self, unpacker):
+		self.signature.unpack(unpacker)
+		self.issuer		= unpacker('>64s')[0].rstrip(b'\x00')
+		self.tag		= unpacker('>I')[0]
+		self.name		= unpacker('>64s')[0].rstrip(b'\x00')
+		self.key		= unpacker('>316s')[0]
+
+class	CETK():
+	def	__init__(self):
+		self.signature	= SIGNATURE()
+		self.issuer			= []
+		self.public_key			= []
+		self.version			= 0
+		self.ca_crl_version		= 0
+		self.signer_crl_version		= 0
+		self.title_key			= []
+		self.reserved1			= 0
+		self.title_id			= []
+		self.reserved2			= []
+		self.ticket_version		= []
+		self.reserved3			= []
+		self.license_type		= 0
+		self.ckey_index			= 0
+		self.reserved4			= []
+		self.account_id			= []
+		self.reserved5			= 0
+		self.audit			= 0
+		self.reserved6			= []
+		self.limits			= []
+		self.content_index		= []
+		self.certificates = []
+
+	def	__str__(self):
+		o = ''
+		o += '{ cetk\n'
+		o += str(self.signature)
+		o += "Issuer: %s\n" % self.issuer
+		#self.public_key			= unpacker('>60s')[0]
+		o += "Version %d\n" % self.version
+		#self.ca_crl_version		= unpacker('B')[0]
+		#self.signer_crl_version	= unpacker('B')[0]
+		#self.title_key			= unpacker('>16s')[0]
+		#self.reserved1			= unpacker('B')[0]
+		#self.ticket_id			= unpacker('>Q')[0]
+		#self.console_id			= unpacker('>I')[0]
+		o += "Title ID %8X\n" % self.title_id
+		#self.reserved2			= unpacker('>H')[0]
+		#self.ticket_title_version	= unpacker('>H')[0]
+		#self.reserved3			= unpacker('8s')[0]
+		#self.license_type		= unpacker('B')[0]
+		o += "CKEY index %X\n" % self.ckey_index
+		#self.reserved4			= unpacker('42s')[0]
+		#self.account_id		= unpacker('>I')[0]
+		#self.reserved5			= unpacker('B')[0]
+		#self.audit			= unpacker('B')[0]
+		#self.reserved6			= unpacker('66s')[0]
+		#self.limits			= unpacker('64s')[0]
+		#self.content_index		= unpacker('172s')[0]
+		#self.certificates = []
+		for i in range(len(self.certificates)):
+			o += str(self.certificates[i])
+		o += '} cetk\n'
+
+		return o
+
+	def	loadFile(self, filename):
+		unpacker = buffer_unpacker(open(filename, 'rb').read())
+		self.unpack(unpacker)
+
+	def	unpack(self, unpacker):
+		self.signature.unpack(unpacker)
+		self.issuer			= unpacker('>64s')[0].rstrip(b'\x00')
+		self.public_key			= unpacker('>60s')[0]
+		self.version			= unpacker('B')[0]
+		self.ca_crl_version		= unpacker('B')[0]
+		self.signer_crl_version		= unpacker('B')[0]
+		self.title_key			= unpacker('>16s')[0]
+		self.reserved1			= unpacker('B')[0]
+		self.ticket_id			= unpacker('>Q')[0]
+		self.console_id			= unpacker('>I')[0]
+		self.title_id			= unpacker('>Q')[0]
+		self.reserved2			= unpacker('>H')[0]
+		self.ticket_title_version	= unpacker('>H')[0]
+		self.reserved3			= unpacker('8s')[0]
+		self.license_type		= unpacker('B')[0]
+		self.ckey_index			= unpacker('B')[0]
+		self.reserved4			= unpacker('42s')[0]
+		self.account_id			= unpacker('>I')[0]
+		self.reserved5			= unpacker('B')[0]
+		self.audit			= unpacker('B')[0]
+		self.reserved6			= unpacker('66s')[0]
+		self.limits			= unpacker('64s')[0]
+		self.content_index		= unpacker('172s')[0]
+		self.certificates = []
+		while not unpacker.iseof():
+			cert = TMD_CERT()
+			cert.unpack(unpacker)
+			self.certificates.append(cert)
+
 class TMD_PARSER():
 	""" Parses Wii U TMD """
 	def __init__(self, filepath=None):
@@ -51,11 +245,9 @@ class TMD_PARSER():
 
 		# Read in the entire file, then set up our unpacker
 		self.data = open(filepath, 'rb').read()
-		self.unpacker = unpacker(self.data)
+		self.unpacker = buffer_unpacker(self.data)
 
-		self.tmd_signature_type = 0
-		self.tmd_signature = []
-		self.tmd_padding1 = []
+		self.tmd_signature = SIGNATURE()
 		self.tmd_issuer = 	[]
 		self.tmd_version = 0
 		self.tmd_ca_crl_version = 0 
@@ -78,14 +270,11 @@ class TMD_PARSER():
 		self.tmd_hash_table_hash = []
 		self.tmd_content_info_records = []
 		self.tmd_contents = []
+		self.certificates = []
 		
-	def readTmdHdr(self):
-		self.tmd_signature_type		= self.unpacker('>I')[0]
-		sig_type = get_signature_type('value', self.tmd_signature_type)
-		#print(sig_type)
-		self.tmd_signature		= self.unpacker('>%ds' % sig_type['size'])[0]
-		self.tmd_padding1		= self.unpacker('>%ds' % sig_type['padding'])[0]
-		#print("o 0x%X" % self.unpacker._offset)
+	def	ReadContent(self):
+		self.tmd_signature.unpack(self.unpacker)
+
 		self.tmd_issuer			= self.unpacker('>64s')[0]
 		self.tmd_version		= self.unpacker('1c')[0]
 		self.tmd_ca_crl_version		= self.unpacker('1c')[0]
@@ -137,22 +326,23 @@ class TMD_PARSER():
 					print("Found: %s" % ccr_hash)
 				else:
 					print("Hash ok for CIR entry %d" %  i)
-			
-	def ReadContent(self):
-		try:
-			self.readTmdHdr()			#Read in the TMD Header
-			self.tmd_contents = []
-			for content in range(0, self.tmd_number_of_contents):
-				tmd_cnt = TMD_CONTENT()
-				tmd_cnt.id		= '%08x' % self.unpacker('>I')[0]
-				tmd_cnt.index		= self.unpacker('>H')[0]
-				tmd_cnt.type		= self.unpacker('>H')[0]
-				tmd_cnt.size		= self.unpacker('>Q')[0]
-				tmd_cnt.sha1_hash	= self.unpacker('>32s')[0]
-				self.tmd_contents.append(tmd_cnt)
-		except Exception as e:
-			print(e)
-		return
+
+		# Read in the content records
+		self.tmd_contents = []
+		for content in range(0, self.tmd_number_of_contents):
+			tmd_cnt = TMD_CONTENT()
+			tmd_cnt.unpack(self.unpacker)
+			self.tmd_contents.append(tmd_cnt)
+
+		# Read in any certificates after
+		self.certificates = []
+		while not self.unpacker.iseof():
+			print("Found cert at 0x%X" % self.unpacker.tell())
+			cert = TMD_CERT()
+			cert.unpack(self.unpacker)
+			self.certificates.append(cert)
+
+
 
 class FST_CONTENT():
 	def __init__(self):
@@ -257,12 +447,3 @@ class FST_PARSER(FST_CONTENT, FE_ENTRY):
 			s_off += 0x02
 			self.fe_entries.append(myfe)
 		return
-		
-			
-
-	
-
-		
-		
-			
-			

@@ -84,20 +84,25 @@ def downloadTMD(titledir, titleid, ver):
 		exit()
 # Find titles from REPO
 
-def parseTMD(titledir, ver):
+def	parseTMD(titledir, ver):
 	cache_dir = os.path.join(titledir, 'cache')
+
 	tmd_path = os.path.join(cache_dir, 'tmd.' +ver)
-	if os.path.isfile(tmd_path):
-		tmd = pytmd.TMD_PARSER(tmd_path)
-		tmd.ReadContent()
-		print("Parsing TMD for:", tmd.tmd_title_id)
-		print("Titles found:")
-		for title in tmd.tmd_contents:
-			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
-		return tmd
-	else:
+	if not os.path.isfile(tmd_path):
 		print("TMD File Not Found!")
 		exit()
+
+	tmd = pytmd.TMD_PARSER(tmd_path)
+	tmd.ReadContent()
+	print("Parsing TMD for:", tmd.tmd_title_id)
+	print("Titles found:")
+	for title in tmd.tmd_contents:
+		print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
+
+	cetk = pytmd.CETK()
+	cetk.loadFile(os.path.join(cache_dir, 'cetk'))
+
+	return (tmd, cetk)
 
 #
 # Download URL to FILE, and show progress in %
@@ -379,7 +384,7 @@ def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
 	# Start with the root dir at index 0
 	extractFstDirectory(titledir, fst, tmd, ckey, dkey, rootdir, 0)
 
-def	packageForWUP(titledir, ver, tmd, keys):
+def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	cache_dir = os.path.join(titledir, 'cache')
 	packagedir = os.path.join(titledir, 'install.' + ver)
 
@@ -393,20 +398,27 @@ def	packageForWUP(titledir, ver, tmd, keys):
 	# Copy our tmd, cetk files
 	print("Copying: title.tmd")
 	shutil.copy(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
+
 	print("Copying: title.tik")
 	shutil.copy(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
 
 	# Copy the certs from the tmd, cetk files
 	print("Creating: title.cert")
-	t = open(os.path.join(packagedir, 'title.tmd'), 'rb').read()
-	c = open(os.path.join(packagedir, 'title.tik'), 'rb').read()
-	f = open(os.path.join(packagedir, 'title.cert'), 'wb')
-	# FIXME - parse the files instead of using hard-coded offsets
-	# See 3DS docs for details
-	f.write(c[0x650 : 0x650 + 0x400])
-	f.write(t[0x1224 : 0x1224 + 0x300])
-	f.write(c[0x350 : 0x350 + 0x300])
-	f.close()
+	packer = pytmd.buffer_packer()
+
+	# We can take our root cert from either file
+	cetk.certificates[1].pack(packer)
+	#tmd.certificates[1].pack(packer)
+
+	tmd.certificates[0].pack(packer)
+
+	cetk.certificates[0].pack(packer)
+
+	open(os.path.join(packagedir, 'title.cert'), 'wb').write(bytes(packer._buffer))
+
+	#f.write(c[0x650 : 0x650 + 0x400])
+	#f.write(t[0x1224 : 0x1224 + 0x300])
+	#f.write(c[0x350 : 0x350 + 0x300])
 
 	# Copy the encrypted content files
 	for content in tmd.tmd_contents:
@@ -440,14 +452,14 @@ def main():
 		os.makedirs(titledir, exist_ok = True)
 
 		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
-		tmd = parseTMD(titledir, ver)
+		(tmd, cetk) = parseTMD(titledir, ver)
 		keys,hex_keys = loadTitleKeys(titledir, ver, ckey)		#keys: encryptedTitle, common, title_iv
 		d_title_key, d_title_key_hex = decryptTitleKey(keys)
 		print("Decrypted Title Key:", d_title_key_hex.upper())
 
 		if (options.wup):
 			downloadTitles(titledir, tmd)
-			packageForWUP(titledir, ver, tmd, keys)
+			packageForWUP(titledir, ver, tmd, cetk, keys)
 
 		if (options.extract):
 			downloadTitles(titledir, tmd)
