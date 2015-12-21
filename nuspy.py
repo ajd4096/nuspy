@@ -115,6 +115,7 @@ def	downloadFileProgress(url, filename, expected_size):
 	else:
 		file_size = 0
 	sys.stdout.write("Downloading: %s ..." % url)
+	sys.stdout.flush()
 	u = urllib.request.urlopen(req)
 	f = open(filename, 'ab')
 	while True:
@@ -134,6 +135,7 @@ def	downloadFileProgress(url, filename, expected_size):
 
 def downloadTitles(titledir, tmd):
 	cache_dir = os.path.join(titledir, 'cache')
+	print("Downloading content files")
 	for content in tmd.tmd_contents:
 		url = nus + tmd.tmd_title_id + r'/' + content.id
 		filename = os.path.join(cache_dir, content.id)
@@ -163,6 +165,7 @@ def downloadTitles(titledir, tmd):
 #
 def decryptContentFiles(titledir, tmd, ckey, dkey):
 	cache_dir = os.path.join(titledir, 'cache')
+	print("Decrypting content files")
 	for content in tmd.tmd_contents:
 		filename = os.path.join(cache_dir, content.id)
 
