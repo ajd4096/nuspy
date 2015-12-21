@@ -443,9 +443,9 @@ def main():
 	(options, args) = parser.parse_args()
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
-	ver = options.version
 
 	for titleid in args:
+		ver = options.version
 		keys = []
 		hex_keys = []
 
