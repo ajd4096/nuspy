@@ -169,62 +169,163 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 	for content in tmd.tmd_contents:
 		filename = os.path.join(cache_dir, content.id)
 
-		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
-			print("Cached: %s.plain" % filename)
+
+		if not content.type & 0x02:
+			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
+				print("Cached: %s.plain" % filename)
+			else:
+				print("Decrypting: %s" % filename)
+
+				iv_key = list(map(ord, '\x00'*16))
+				iv_key[0] = content.index >> 8
+				iv_key[1] = content.index
+
+				# Read the encrypted file
+				encrypted_data = open(filename, 'rb').read()
+
+				# Pad up to 16
+				if ((len(encrypted_data) % 16) != 0):
+					encrypted_data += b'\x00' * (16 - (len(encrypted_data) % 16))
+
+				decrypted_data = decryptData((encrypted_data, dkey, iv_key)).encode('latin-1')
+
+				# Check our SHA1 hash
+				# Only checksum the content.size
+				found = hashlib.sha1(decrypted_data[:content.size]).digest()
+				expected = content.sha1_hash[:20]
+				if (found != expected):
+					print("Hash mismatch")
+					print("Expected %s" % binascii.hexlify(expected))
+					print("Found    %s" % binascii.hexlify(found))
+					exit(1)
+				else:
+					#print("Hash ok")
+					pass
+
+				# Write the decrypted file.plain
+				open(filename + ".plain", "wb").write(decrypted_data)
 		else:
-			print("Decrypting: %s" % filename)
+			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
+				print("Cached: %s.plain" % filename)
+			else:
+				print("Decrypting: %s" % filename)
 
-			iv_key = list(map(ord, '\x00'*16))
-			iv_key[0] = content.index >> 8
-			iv_key[1] = content.index
+				# Process in input blocks of 0x10000, output blocks of 0xFC00
+				# The first 0x400 bytes of each block contain the H0,H1,H2 hashes
+				# H0 (0-15) are repeated 16x and indexed by (block_index % 16)
+				# H1 (16-31) are repeated 256x and indexed by ((block_index / 16) % 16) ?
+				# H2 (32-47) are repeated 4096x and indexed by ((block_index / 256) % 16) ?
+				# H3 (0-N) are stored in the .h3 file and indexed by (block_index / 4096)
+				# Each hash is a 20-byte SHA1
 
-			# Read the encrypted file
-			encrypted_data = open(filename, 'rb').read()
+				# Read in our .h3 file
+				H3_hashes = open(filename + '.h3', 'rb').read()
 
-			# Pad up to 16
-			if ((len(encrypted_data) % 16) != 0):
-				encrypted_data += b'\x00' * (16 - (len(encrypted_data) % 16))
+				# Check our SHA1 hash
+				found = hashlib.sha1(H3_hashes).digest()
+				expected = content.sha1_hash[:20]
+				if (found != expected):
+					print("Hash mismatch for .h3 file")
+					print("Expected %s" % binascii.hexlify(expected))
+					print("Found    %s" % binascii.hexlify(found))
+					exit(1)
+				else:
+					#print("Hash ok for .h3 file")
+					pass
 
-			decrypted_data = decryptData((encrypted_data, dkey, iv_key)).encode('latin-1')
+				enc_file = open(filename, 'rb')
+				dec_file = open(filename + ".plain", 'wb')
 
-			# Write the decrypted file.plain
-			open(filename + ".plain", "wb").write(decrypted_data)
+				block_index = 0
+				while True:
+					#print("Block %d" % block_index)
 
-#
-# Validate hashes of title.plain, title.h3
-# FIXME - verify the hashes in the .h3 file
-#
-# The .h3 seems to be 1 or more 20-byte hash, with one hash for each 256M?
-# The hashes are not stored in the content file (encrypted or plain)
-# The hashes do not match any N * 1MB chunk starting from offset 0 of the content file (encrypted or plain)
-#
-def verifyContentHashes(titledir, tmd):
-	cache_dir = os.path.join(titledir, 'cache')
-	failed = False
-	for content in tmd.tmd_contents:
-		filename = os.path.join(cache_dir, content.id)
+					# Read the encrypted file
+					enc_data = enc_file.read(0x10000)
+					if enc_data == '':
+						break
+					if len(enc_data) < 0x400:
+						break
 
-		# If the type has a .h3, the TMD hash is of the .h3 file
-		# Otherwise it is the hash of the decrypted contents file
-		if (content.type & 0x02):
-			filename += ".h3"
-		else:
-			filename += ".plain"
+					# Set up our IV using the content index
+					iv_key = bytearray(b'\x00' * 16)
+					iv_key[1] = content.index
 
-		print("Checking %s" % filename)
+					# Decrypt the hash block
+					dec_hashes = bytearray(decryptData((enc_data[: 0x400], dkey, iv_key)).encode('latin-1'))
+					dec_hashes[1] ^= content.index
 
-		# Only checksum the content.size
-		found = hashlib.sha1(open(filename, "rb").read()[:content.size]).hexdigest()
+					# Get the starting point of each hash level
+					H0_start = (block_index % 16) * 20
+					H1_start = (16 + (block_index // 16) % 16) * 20
+					H2_start = (32 + (block_index // 256) % 16) * 20
+					H3_start = ((block_index // 4096) % 16) * 20
 
-		expected = binascii.hexlify(content.sha1_hash[:20]).decode('utf-8')
+					# Set up our IV from the H0 hash
+					iv_key = bytearray(dec_hashes[H0_start : H0_start + 16])
 
-		if (found != expected):
-			print("Checksum failed for %s!" % filename)
-			print("Expected: %s" % expected)
-			print("Found: %s" % found)
-			failed = True
-	if failed:
-		exit(1)
+					# Decrypt the next 0xFC00 bytes
+					dec_data = decryptData((enc_data[0x400 : ], dkey, iv_key)).encode('latin-1')
+
+					# Check our H0 hash
+					found = hashlib.sha1(dec_data).digest()
+					expected = dec_hashes[H0_start : H0_start + 20]
+					if (found != expected):
+						print("Hash mismatch for H0 block %d" % block_index)
+						print("Expected %s" % binascii.hexlify(expected))
+						print("Found    %s" % binascii.hexlify(found))
+						exit(1)
+					else:
+						#print("Hash ok for H0 block %d" % block_index)
+						pass
+
+					# Check our H1 hash
+					if ((block_index % 16) == 0):
+						found = hashlib.sha1(dec_hashes[H0_start : H0_start + 16 * 20]).digest()
+						expected = dec_hashes[H1_start : H1_start + 20]
+						if (found != expected):
+							print("Hash mismatch for H1 block %d" % block_index)
+							print("Expected %s" % binascii.hexlify(expected))
+							print("Found    %s" % binascii.hexlify(found))
+							exit(1)
+						else:
+							#print("Hash ok for H1 block %d" % block_index)
+							pass
+
+					# Check our H2 hash
+					if ((block_index % 256) == 0):
+						found = hashlib.sha1(dec_hashes[H1_start : H1_start + 16 * 20]).digest()
+						expected = dec_hashes[H2_start : H2_start + 20]
+						if (found != expected):
+							print("Hash mismatch for H2 block %d" % block_index)
+							print("Expected %s" % binascii.hexlify(expected))
+							print("Found    %s" % binascii.hexlify(found))
+							exit(1)
+						else:
+							#print("Hash ok for H2 block %d" % block_index)
+							pass
+
+					# Check our H3 hash
+					if ((block_index % 4096) == 0):
+						found = hashlib.sha1(dec_hashes[H2_start : H2_start + 16 * 20]).digest()
+						expected = H3_hashes[H3_start : H3_start + 20]
+						if (found != expected):
+							print("Hash mismatch for H3 block %d" % block_index)
+							print("Expected %s" % binascii.hexlify(expected))
+							print("Found    %s" % binascii.hexlify(found))
+							exit(1)
+						else:
+							#print("Hash ok for H3 block %d" % block_index)
+							pass
+
+					# Write out the decrypted data
+					dec_file.write(dec_data)
+
+					# Count our block #
+					block_index += 1
+
+				dec_file.close()
+				enc_file.close()
 
 
 def loadTitleKeys(titledir, ver, ckey):
@@ -468,7 +569,6 @@ def main():
 			downloadTitles(titledir, tmd)
 
 			decryptContentFiles(titledir, tmd, ckey, d_title_key)
-			verifyContentHashes(titledir, tmd)
 
 			print("Reading Contents:")
 			fst = loadContent(titledir, tmd, keys[1], d_title_key)
