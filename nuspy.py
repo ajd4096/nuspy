@@ -104,17 +104,29 @@ def	parseTMD(titledir, ver):
 
 	return (tmd, cetk)
 
+suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+def	humansize(nbytes):
+	if nbytes == 0:
+		return '0 B'
+	i = 0
+	while nbytes >= 1024 and i < len(suffixes)-1:
+		nbytes /= 1024.
+		i += 1
+	f = ('%.1f' % nbytes).rstrip('0').rstrip('.')
+	return '%s %s' % (f, suffixes[i])
+
 #
 # Download URL to FILE, and show progress in %
 #
 def	downloadFileProgress(url, filename, expected_size):
+	prefix = "\rDownloading: %s (%s) " % (url, humansize(expected_size))
 	req = urllib.request.Request(url)
 	if os.path.isfile(filename):
 		file_size = os.path.getsize(filename)
 		req.headers['Range'] = 'bytes=%s-' % file_size
 	else:
 		file_size = 0
-	sys.stdout.write("Downloading: %s ..." % url)
+	sys.stdout.write("%s ..." % prefix)
 	sys.stdout.flush()
 	u = urllib.request.urlopen(req)
 	f = open(filename, 'ab')
@@ -126,10 +138,10 @@ def	downloadFileProgress(url, filename, expected_size):
 		f.flush()
 		file_size += len(data)
 		percent = 100 * file_size // expected_size
-		sys.stdout.write("\rDownloading: %s %2d%%" % (url, percent))
+		sys.stdout.write("%s %2d%%" % (prefix, percent))
 		sys.stdout.flush()
 	f.close()
-	sys.stdout.write("\rDownloading: %s done\n" % url)
+	sys.stdout.write("%s done\n" % prefix)
 	sys.stdout.flush()
 
 
@@ -148,15 +160,15 @@ def downloadTitles(titledir, tmd):
 			downloadFileProgress(url, filename, content.size)
 
 		# Fetch the .h3 files
-		# We don't know the size, but they are only small (20 or 40 bytes)
 		if (content.type & 0x02):
 			url += '.h3'
 			filename += '.h3'
-			if (os.path.isfile(filename)):
+			# This should be 20 bytes for each 256MB (or part thereof)
+			expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
+			if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
 				print("Cached:", url)
 			else:
-				print("Downloading:", url)
-				urllib.request.urlretrieve(url, filename)
+				downloadFileProgress(url, filename, expected_size)
 
 	return
 
