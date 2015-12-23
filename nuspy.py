@@ -4,6 +4,7 @@ import sys, os, shutil, pytmd, struct, functools
 import binascii
 import hashlib
 from optparse import OptionParser
+import time
 import urllib.request
 try:
 	#Completely borrowed the Cyrpto.Cipher idea from 
@@ -104,8 +105,8 @@ def	parseTMD(titledir, ver):
 
 	return (tmd, cetk)
 
-suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
 def	humansize(nbytes):
+	suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
 	if nbytes == 0:
 		return '0 B'
 	i = 0
@@ -114,6 +115,16 @@ def	humansize(nbytes):
 		i += 1
 	f = ('%.1f' % nbytes).rstrip('0').rstrip('.')
 	return '%s %s' % (f, suffixes[i])
+
+def	humanrate(rate):
+	suffixes = ['B/s', 'kB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s']
+	if rate == 0:
+		return '0 B/s'
+	i = 0
+	while rate >= 1000 and i < len(suffixes)-1:
+		rate /= 1000.
+		i += 1
+	return '%3d %s' % (int((rate + 0.5)), suffixes[i])
 
 #
 # Download URL to FILE, and show progress in %
@@ -131,14 +142,17 @@ def	downloadFileProgress(url, filename, expected_size):
 	u = urllib.request.urlopen(req)
 	f = open(filename, 'ab')
 	while True:
+		start = time.time()
 		data = u.read(1024*1024)
 		if not data:
 			break
 		f.write(data)
 		f.flush()
+		end = time.time()
 		file_size += len(data)
 		percent = 100 * file_size // expected_size
-		sys.stdout.write("%s %2d%%" % (prefix, percent))
+		rate = len(data) / (end - start)
+		sys.stdout.write("%s %2d%%  %8.8s" % (prefix, percent, humanrate(rate)))
 		sys.stdout.flush()
 	f.close()
 	sys.stdout.write("%s done\n" % prefix)
