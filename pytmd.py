@@ -254,7 +254,8 @@ class TMD_PARSER():
 		self.tmd_signer_crl_version = 0
 		self.tmd_padding2 = 0
 		self.tmd_system_version = 0
-		self.tmd_title_id = 0
+		self.title_id = 0
+		self.title_id_hex = ''
 		self.tmd_title_type = 0
 		self.tmd_group_id = 0
 		self.tmd_public_save_size = 0
@@ -281,7 +282,11 @@ class TMD_PARSER():
 		self.tmd_signer_crl_version	= self.unpacker('1c')[0]
 		self.tmd_padding2		= self.unpacker('1c')[0]
 		self.tmd_system_version		= '%016x' % self.unpacker('>Q')[0]
-		self.tmd_title_id		= '%016x' % self.unpacker('>Q')[0]
+		# The title ID is an 8-byte hex number, but it is an ID, not an int
+		# (We will not be using it to add/subtract/ etc)
+		# Read it in as a string
+		self.title_id			= self.unpacker('>8s')[0]
+		self.title_id_hex		= binascii.hexlify(self.title_id).decode('latin-1')
 		self.tmd_title_type		= self.unpacker('>I')[0]
 		self.tmd_group_id		= self.unpacker('>H')[0]
 		self.tmd_public_save_size	= self.unpacker('>I')[0]

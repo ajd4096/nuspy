@@ -70,6 +70,19 @@ def downloadTMD(titledir, titleid, ver):
 				print("Downloading: %s" % url)
 				urllib.request.urlretrieve(url, file)
 
+		return ver
+
+	except Exception as e:
+		print("Exception:",e)
+		exit()
+
+def downloadCETK(titledir, titleid):
+	cache_dir = os.path.join(titledir, 'cache')
+	os.makedirs(cache_dir, exist_ok = True)
+
+	print("Downloading CETK for:",titleid)
+
+	try:
 		url = nus + titleid + r'/cetk'
 		file = os.path.join(cache_dir, 'cetk')
 		if os.path.isfile(file):
@@ -78,16 +91,12 @@ def downloadTMD(titledir, titleid, ver):
 			print("Downloading: %s" % url)
 			urllib.request.urlretrieve(url, file)
 
-		return ver
-
 	except Exception as e:
 		print("Exception:",e)
 		exit()
-# Find titles from REPO
 
 def	parseTMD(titledir, ver):
 	cache_dir = os.path.join(titledir, 'cache')
-
 	tmd_path = os.path.join(cache_dir, 'tmd.' +ver)
 	if not os.path.isfile(tmd_path):
 		print("TMD File Not Found!")
@@ -95,7 +104,7 @@ def	parseTMD(titledir, ver):
 
 	tmd = pytmd.TMD_PARSER(tmd_path)
 	tmd.ReadContent()
-	print("Parsing TMD for:", tmd.tmd_title_id)
+	print("Parsing TMD for: %s" % tmd.title_id_hex)
 	print("Titles found:")
 	total_size = 0
 	for title in tmd.tmd_contents:
@@ -103,10 +112,15 @@ def	parseTMD(titledir, ver):
 		total_size += title.size
 	print("Total size: %s" % humansize(total_size))
 
+	return tmd
+
+def	parseCETK(titledir):
+	cache_dir = os.path.join(titledir, 'cache')
+
 	cetk = pytmd.CETK()
 	cetk.loadFile(os.path.join(cache_dir, 'cetk'))
 
-	return (tmd, cetk)
+	return cetk
 
 def	humansize(nbytes):
 	suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
@@ -166,7 +180,7 @@ def downloadTitles(titledir, tmd):
 	cache_dir = os.path.join(titledir, 'cache')
 	print("Downloading content files")
 	for content in tmd.tmd_contents:
-		url = nus + tmd.tmd_title_id + r'/' + content.id
+		url = nus + tmd.title_id_hex + r'/' + content.id
 		filename = os.path.join(cache_dir, content.id)
 		# If we don't have the file or it is too small, download it
 		# FIXME: there are some titles where the file is larger than the tmd content.size.
@@ -356,36 +370,7 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 				dec_file.close()
 				enc_file.close()
 
-
-def loadTitleKeys(titledir, ver, ckey):
-	cache_dir = os.path.join(titledir, 'cache')
-	"""
-	Opens cetk, tmd, and the common key to decrypt the title key found in cetk.
-	Basically this is a python implementation of Crediar's CDecrypt.  He gets 
-	full credit for both demonstrating how this looks and where the encrypted Title ID.
-	"""
-	cetkf = open(os.path.join(cache_dir, 'cetk'), 'rb')
-	cetkf.seek(0x1bf,0)
-	cetk = cetkf.read(16)
-
-	tidkeyf = open(os.path.join(cache_dir, 'tmd.' +ver), 'rb')
-	tidkeyf.seek(0x18c, 0)
-	tidkey = tidkeyf.read(8) 
-	tidkey += b'\x00'*8
-	
-	cetkf.close()
-	tidkeyf.close()
-	
-	etkey_hex = ('%016x' % struct.unpack('>QQ',cetk)[0]) + ('%016x' % struct.unpack('>QQ', cetk)[1])
-	ckey_hex = ('%016x' % struct.unpack('>QQ', ckey)[0]) + ('%016x' % struct.unpack('>QQ', ckey)[1])
-	tidkey_hex = ('%016x' % struct.unpack('>QQ', tidkey)[0]) + ('%016x' % struct.unpack('>QQ', tidkey)[1])
-	
-	
-	etkey =  list(struct.unpack('>BBBBBBBBBBBBBBBB',cetk))
-	ckey  =  list(struct.unpack('>BBBBBBBBBBBBBBBB',ckey))
-	tkey_iv = list(struct.unpack('>BBBBBBBBBBBBBBBB',tidkey))
-	return [etkey,ckey,tkey_iv],[etkey_hex,ckey_hex,tidkey_hex]
-
+# Wierd design choice, return decrypted data as a string
 def decryptData(keys):
 	data,d_crypt_key,iv_key = keys
 	
@@ -413,20 +398,13 @@ def decryptData(keys):
 	return decrypted 
 
 def decryptTitleKey(keys):
+
 	decrypted = decryptData(keys)
-	dtkey_packed = 0
-	dtkey  = list(map(ord,list(decrypted)))
-	
-	for val in dtkey:
-		dtkey_packed += val
-		dtkey_packed = dtkey_packed << 8
-	dtkey_packed = dtkey_packed >> 8
-	dtkey_hex = ('%016x' % dtkey_packed)
-	
-	#print("Encrypted Title Key:",data)
-	#print("IV:", iv_key)
-	#print("Decrypted Title Key:", dtkey_hex.upper())
-	return dtkey,dtkey_hex 	
+
+	# Convert our string back to an array of bytes
+	dtkey  = bytes(decrypted.encode('latin-1'))
+
+	return dtkey
 	
 def loadContent(titledir, tmd,ckey,dkey):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -567,43 +545,73 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 def main():
 
 	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
-	parser.add_option('-v', '--version', dest='version', help='download VERSION or latest if not specified', metavar='VERSION')
-	parser.add_option('-e', '--extract', dest='extract', help='extract content', action='store_true', default=False)
-	parser.add_option('-w', '--wup',     dest='wup',     help='pack for WUP installer', action='store_true', default=False)
+	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
+	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content',			action='store_true',		default=False)
+	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
+	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
+	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	(options, args) = parser.parse_args()
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
 
 	for titleid in args:
-		ver = options.version
-		keys = []
-		hex_keys = []
+		ver		= options.version
+		d_title_key	= None
+		tmd		= None
+		cetk		= None
+		keys		= []
+		#hex_keys	= []
 
 		ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
 
 		titledir = os.path.join(filedir, titleid)
 		os.makedirs(titledir, exist_ok = True)
 
+		# Download and parse the TMD file(s)
 		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
-		(tmd, cetk) = parseTMD(titledir, ver)
-		keys,hex_keys = loadTitleKeys(titledir, ver, ckey)		#keys: encryptedTitle, common, title_iv
-		d_title_key, d_title_key_hex = decryptTitleKey(keys)
-		print("Decrypted Title Key:", d_title_key_hex.upper())
+		tmd = parseTMD(titledir, ver)
+
+		if options.dec_title_key:
+			print("Using decrypted title key: %s" % options.dec_title_key)
+			d_title_key = binascii.unhexlify(options.dec_title_key)
+
+		elif options.enc_title_key:
+			print("Using encrypted title key: %s" % options.enc_title_key)
+			# Decrypt the encrypted title key using the common key and the title ID
+			title_iv = tmd.title_id + b'\x00' * 8
+			keys = ( binascii.unhexlify(options.enc_title_key), ckey, title_iv)
+			d_title_key = decryptTitleKey(keys)
+
+		else:
+			# Download and parse the CETK file
+			downloadCETK(titledir, titleid)
+			cetk = parseCETK(titledir)
+
+			print("Using cetk key: %s" % binascii.hexlify(cetk.title_key))
+
+			# Decrypt the encrypted title key using the common key and the title ID
+			title_iv = tmd.title_id + b'\x00' * 8
+			keys = (cetk.title_key, ckey, title_iv)
+			d_title_key = decryptTitleKey(keys)
+
+		print("Decrypted Title Key:", binascii.hexlify(d_title_key))
 
 		if (options.wup):
+			if not cetk:
+				print("Error: Packaging for WUP requires the cetk file")
+				exit(1)
 			downloadTitles(titledir, tmd)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
 		if (options.extract):
 			downloadTitles(titledir, tmd)
-
 			decryptContentFiles(titledir, tmd, ckey, d_title_key)
 
 			print("Reading Contents:")
-			fst = loadContent(titledir, tmd, keys[1], d_title_key)
+			fst = loadContent(titledir, tmd, ckey, d_title_key)
 			print("Found " + str((len(fst.fe_entries))) + " files")
 
-			extractFiles(titledir, ver, fst, tmd, keys[1], d_title_key)
+			extractFiles(titledir, ver, fst, tmd, ckey, d_title_key)
 
 
 
