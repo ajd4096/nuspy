@@ -97,8 +97,11 @@ def	parseTMD(titledir, ver):
 	tmd.ReadContent()
 	print("Parsing TMD for:", tmd.tmd_title_id)
 	print("Titles found:")
+	total_size = 0
 	for title in tmd.tmd_contents:
 		print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
+		total_size += title.size
+	print("Total size: %s" % humansize(total_size))
 
 	cetk = pytmd.CETK()
 	cetk.loadFile(os.path.join(cache_dir, 'cetk'))
