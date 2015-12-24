@@ -443,10 +443,11 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
 
-	if not options.quiet:
-		print("Creating:  ", currentdir)
-	if not os.path.isdir(currentdir):
-		os.makedirs(currentdir)
+	if not options.extract_meta:
+		if not options.quiet:
+			print("Creating:  ", currentdir)
+		if not os.path.isdir(currentdir):
+			os.makedirs(currentdir)
 
 	while (fstindex + 1 < fe.f_len):
 		nextfe = fst.fe_entries[fstindex + 1]
@@ -464,8 +465,11 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
 
+	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
+		return
+
 	filename = os.path.join(currentdir, fe.fn)
-	if not options.quiet:
+	if not options.quiet or options.extract_meta:
 		print("Extracting:", filename)
 
 	offset = fe.f_off
@@ -487,6 +491,8 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	input_file = open(input_filename, 'rb')
 	input_file.seek(offset)
 
+	if not os.path.isdir(currentdir):
+		os.makedirs(currentdir)
 	output_file = open(filename, 'wb')
 
 	# Copy the data in chunks (some files are big compared to memory size)
@@ -578,6 +584,7 @@ def main():
 	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content',			action='store_true',		default=False)
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
+	parser.add_option('-m',	'--meta',	dest='extract_meta',	help='extract only the meta/meta.xml',	action='store_true',		default=False)
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	(options, args) = parser.parse_args()
@@ -635,7 +642,7 @@ def main():
 				exit(1)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
-		if (options.extract):
+		if (options.extract or options.extract_meta):
 
 			print("Reading Contents:")
 			fst = loadContent(titledir, tmd, ckey, d_title_key)
