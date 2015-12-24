@@ -585,6 +585,7 @@ def main():
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
 	parser.add_option('-m',	'--meta',	dest='extract_meta',	help='extract only the meta/meta.xml',	action='store_true',		default=False)
+	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	(options, args) = parser.parse_args()
@@ -597,9 +598,6 @@ def main():
 		tmd		= None
 		cetk		= None
 		keys		= []
-		#hex_keys	= []
-
-		ckey = open(os.path.join(filedir, 'ckey.bin'), 'rb').read(16)
 
 		titledir = os.path.join(filedir, titleid)
 		os.makedirs(titledir, exist_ok = True)
@@ -607,6 +605,14 @@ def main():
 		# Download and parse the TMD file(s)
 		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
 		tmd = parseTMD(titledir, ver)
+
+		if options.common_key:
+			ckey_hex = options.common_key
+		else:
+			ckey_hex = b'D7B00402659BA2ABD2CB0DB27FA2B656'
+		if not options.quiet:
+			print("Using common key: %s" % options.common_key)
+		ckey = binascii.unhexlify(ckey_hex)
 
 		if options.dec_title_key:
 			print("Using decrypted title key: %s" % options.dec_title_key)
