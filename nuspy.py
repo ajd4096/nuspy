@@ -68,7 +68,8 @@ def downloadTMD(titledir, titleid, ver):
 			url = nus + titleid + r'/tmd.'+ver
 			file = os.path.join(cache_dir, 'tmd.' + ver)
 			if os.path.isfile(file):
-				print("Cached: %s" % file)
+				if not options.quiet:
+					print("Cached: %s" % file)
 			else:
 				print("Downloading: %s" % url)
 				urllib.request.urlretrieve(url, file)
@@ -89,7 +90,8 @@ def downloadCETK(titledir, titleid):
 		url = nus + titleid + r'/cetk'
 		file = os.path.join(cache_dir, 'cetk')
 		if os.path.isfile(file):
-			print("Cached: %s" % file)
+			if not options.quiet:
+				print("Cached: %s" % file)
 		else:
 			print("Downloading: %s" % url)
 			urllib.request.urlretrieve(url, file)
@@ -108,12 +110,13 @@ def	parseTMD(titledir, ver):
 	tmd = pytmd.TMD_PARSER(tmd_path)
 	tmd.ReadContent()
 	print("Parsing TMD for: %s" % tmd.title_id_hex)
-	print("Titles found:")
-	total_size = 0
-	for title in tmd.tmd_contents:
-		print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
-		total_size += title.size
-	print("Total size: %s" % humansize(total_size))
+	if not options.quiet:
+		print("Titles found:")
+		total_size = 0
+		for title in tmd.tmd_contents:
+			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
+			total_size += title.size
+		print("Total size: %s" % humansize(total_size))
 
 	return tmd
 
@@ -189,7 +192,8 @@ def downloadTitles(titledir, tmd):
 		# FIXME: there are some titles where the file is larger than the tmd content.size.
 		# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
 		if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
-			print("Cached:", url)
+			if not options.quiet:
+				print("Cached:", url)
 		else:
 			downloadFileProgress(url, filename, content.size)
 
@@ -200,7 +204,8 @@ def downloadTitles(titledir, tmd):
 			# This should be 20 bytes for each 256MB (or part thereof)
 			expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
 			if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
-				print("Cached:", url)
+				if not options.quiet:
+					print("Cached:", url)
 			else:
 				downloadFileProgress(url, filename, expected_size)
 
@@ -218,9 +223,11 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 
 		if not content.type & 0x02:
 			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
-				print("Cached: %s.plain" % filename)
+				if not options.quiet:
+					print("Cached: %s.plain" % filename)
 			else:
-				print("Decrypting: %s" % filename)
+				if not options.quiet:
+					print("Decrypting: %s" % filename)
 
 				iv_key = list(map(ord, '\x00'*16))
 				iv_key[0] = content.index >> 8
@@ -252,9 +259,11 @@ def decryptContentFiles(titledir, tmd, ckey, dkey):
 				open(filename + ".plain", "wb").write(decrypted_data)
 		else:
 			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
-				print("Cached: %s.plain" % filename)
+				if not options.quiet:
+					print("Cached: %s.plain" % filename)
 			else:
-				print("Decrypting: %s" % filename)
+				if not options.quiet:
+					print("Decrypting: %s" % filename)
 
 				# Process in input blocks of 0x10000, output blocks of 0xFC00
 				# The first 0x400 bytes of each block contain the H0,H1,H2 hashes
@@ -432,7 +441,8 @@ def loadContent(titledir, tmd,ckey,dkey):
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
-	print("Creating:  ", currentdir)
+	if not options.quiet:
+		print("Creating:  ", currentdir)
 	if not os.path.isdir(currentdir):
 		os.makedirs(currentdir)
 
@@ -453,7 +463,8 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	fe = fst.fe_entries[fstindex]
 
 	filename = os.path.join(currentdir, fe.fn)
-	print("Extracting:", filename)
+	if not options.quiet:
+		print("Extracting:", filename)
 
 	offset = fe.f_off
 	size = fe.f_len
@@ -510,14 +521,17 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	print("Packaging files for WUP installer into %s" % packagedir)
 
 	# Copy our tmd, cetk files
-	print("Copying: title.tmd")
+	if not options.quiet:
+		print("Copying: title.tmd")
 	shutil.copy(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
 
-	print("Copying: title.tik")
+	if not options.quiet:
+		print("Copying: title.tik")
 	shutil.copy(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
 
 	# Copy the certs from the tmd, cetk files
-	print("Creating: title.cert")
+	if not options.quiet:
+		print("Creating: title.cert")
 	packer = pytmd.buffer_packer()
 
 	# We can take our root cert from either file
@@ -538,11 +552,13 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	for content in tmd.tmd_contents:
 		filename = content.id
 
-		print("Copying: %s" % filename)
+		if not options.quiet:
+			print("Copying: %s" % filename)
 		shutil.copy(os.path.join(cache_dir, filename),       os.path.join(packagedir, filename + '.app'))
 		# If the content has a .h3, copy that too
 		if (content.type & 0x02):
-			print("Copying: %s" % filename + '.h3')
+			if not options.quiet:
+				print("Copying: %s" % filename + '.h3')
 			shutil.copy(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
 def main():
@@ -551,6 +567,7 @@ def main():
 
 	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
 	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
+	parser.add_option('-q',	'--quiet',	dest='quiet',		help='quiet output',			action='store_true',		default=False)
 	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content',			action='store_true',		default=False)
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
