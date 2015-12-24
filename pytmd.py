@@ -309,7 +309,8 @@ class TMD_PARSER():
 			print("Expected: %s" % self.tmd_hash_table_hash)
 			print("Found: %s" % cir_table_hash)
 		else:
-			print("Hash ok for CIR table")
+			#print("Hash ok for CIR table")
+			pass
 
 		# Read in all the content info records
 		self.tmd_content_info_records = []
@@ -330,7 +331,8 @@ class TMD_PARSER():
 					print("Expected: %s" % cir_hash)
 					print("Found: %s" % ccr_hash)
 				else:
-					print("Hash ok for CIR entry %d" %  i)
+					#print("Hash ok for CIR entry %d" %  i)
+					pass
 
 		# Read in the content records
 		self.tmd_contents = []
@@ -342,7 +344,7 @@ class TMD_PARSER():
 		# Read in any certificates after
 		self.certificates = []
 		while not self.unpacker.iseof():
-			print("Found cert at 0x%X" % self.unpacker.tell())
+			#print("Found cert at 0x%X" % self.unpacker.tell())
 			cert = TMD_CERT()
 			cert.unpack(self.unpacker)
 			self.certificates.append(cert)
