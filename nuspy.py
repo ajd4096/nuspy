@@ -183,204 +183,206 @@ def	downloadFileProgress(url, filename, expected_size):
 
 
 def downloadTitles(titledir, tmd):
-	cache_dir = os.path.join(titledir, 'cache')
 	print("Downloading content files")
 	for content in tmd.tmd_contents:
-		url = nus + tmd.title_id_hex + r'/' + content.id
-		filename = os.path.join(cache_dir, content.id)
-		# If we don't have the file or it is too small, download it
-		# FIXME: there are some titles where the file is larger than the tmd content.size.
-		# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
-		if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
+		downloadContentFile(titledir, tmd, content)
+
+def	downloadContentFile(titledir, tmd, content):
+	cache_dir = os.path.join(titledir, 'cache')
+	url = nus + tmd.title_id_hex + r'/' + content.id
+	filename = os.path.join(cache_dir, content.id)
+	# If we don't have the file or it is too small, download it
+	# FIXME: there are some titles where the file is larger than the tmd content.size.
+	# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
+	if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
+		if not options.quiet:
+			print("Cached:", url)
+	else:
+		downloadFileProgress(url, filename, content.size)
+
+	# Fetch the .h3 files
+	if (content.type & 0x02):
+		url += '.h3'
+		filename += '.h3'
+		# This should be 20 bytes for each 256MB (or part thereof)
+		expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
+		if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
 			if not options.quiet:
 				print("Cached:", url)
 		else:
-			downloadFileProgress(url, filename, content.size)
-
-		# Fetch the .h3 files
-		if (content.type & 0x02):
-			url += '.h3'
-			filename += '.h3'
-			# This should be 20 bytes for each 256MB (or part thereof)
-			expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
-			if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
-				if not options.quiet:
-					print("Cached:", url)
-			else:
-				downloadFileProgress(url, filename, expected_size)
+			downloadFileProgress(url, filename, expected_size)
 
 	return
 
 #
 # Decrypt 00000000 -> 00000000.plain
 #
-def decryptContentFiles(titledir, tmd, ckey, dkey):
+def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 	cache_dir = os.path.join(titledir, 'cache')
-	print("Decrypting content files")
-	for content in tmd.tmd_contents:
-		filename = os.path.join(cache_dir, content.id)
+	filename = os.path.join(cache_dir, content.id)
 
+	downloadContentFile(titledir, tmd, content)
 
-		if not content.type & 0x02:
-			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
-				if not options.quiet:
-					print("Cached: %s.plain" % filename)
+	if not content.type & 0x02:
+		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
+			if not options.quiet:
+				print("Cached: %s.plain" % filename)
+		else:
+			if not options.quiet:
+				print("Decrypting: %s" % filename)
+
+			iv_key = list(map(ord, '\x00'*16))
+			iv_key[0] = content.index >> 8
+			iv_key[1] = content.index
+
+			# Read the encrypted file
+			encrypted_data = open(filename, 'rb').read()
+
+			# Pad up to 16
+			if ((len(encrypted_data) % 16) != 0):
+				encrypted_data += b'\x00' * (16 - (len(encrypted_data) % 16))
+
+			decrypted_data = decryptData((encrypted_data, dkey, iv_key)).encode('latin-1')
+
+			# Check our SHA1 hash
+			# Only checksum the content.size
+			found = hashlib.sha1(decrypted_data[:content.size]).digest()
+			expected = content.sha1_hash[:20]
+			if (found != expected):
+				print("Hash mismatch")
+				print("Expected %s" % binascii.hexlify(expected))
+				print("Found    %s" % binascii.hexlify(found))
+				exit(1)
 			else:
-				if not options.quiet:
-					print("Decrypting: %s" % filename)
+				#print("Hash ok")
+				pass
 
-				iv_key = list(map(ord, '\x00'*16))
-				iv_key[0] = content.index >> 8
-				iv_key[1] = content.index
+			# Write the decrypted file.plain
+			open(filename + ".plain", "wb").write(decrypted_data)
+	else:
+		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
+			if not options.quiet:
+				print("Cached: %s.plain" % filename)
+		else:
+			if not options.quiet:
+				print("Decrypting: %s" % filename)
+
+			# Process in input blocks of 0x10000, output blocks of 0xFC00
+			# The first 0x400 bytes of each block contain the H0,H1,H2 hashes
+			# H0 (0-15) are repeated 16x and indexed by (block_index % 16)
+			# H1 (16-31) are repeated 256x and indexed by ((block_index / 16) % 16) ?
+			# H2 (32-47) are repeated 4096x and indexed by ((block_index / 256) % 16) ?
+			# H3 (0-N) are stored in the .h3 file and indexed by (block_index / 4096)
+			# Each hash is a 20-byte SHA1
+
+			# Read in our .h3 file
+			H3_hashes = open(filename + '.h3', 'rb').read()
+
+			# Check our SHA1 hash
+			found = hashlib.sha1(H3_hashes).digest()
+			expected = content.sha1_hash[:20]
+			if (found != expected):
+				print("Hash mismatch for .h3 file")
+				print("Expected %s" % binascii.hexlify(expected))
+				print("Found    %s" % binascii.hexlify(found))
+				exit(1)
+			else:
+				#print("Hash ok for .h3 file")
+				pass
+
+			enc_file = open(filename, 'rb')
+			dec_file = open(filename + ".plain", 'wb')
+
+			block_index = 0
+			while True:
+				#print("Block %d" % block_index)
 
 				# Read the encrypted file
-				encrypted_data = open(filename, 'rb').read()
+				enc_data = enc_file.read(0x10000)
+				if enc_data == '':
+					break
+				if len(enc_data) < 0x400:
+					break
 
-				# Pad up to 16
-				if ((len(encrypted_data) % 16) != 0):
-					encrypted_data += b'\x00' * (16 - (len(encrypted_data) % 16))
+				# Set up our IV using the content index
+				iv_key = bytearray(b'\x00' * 16)
+				iv_key[1] = content.index
 
-				decrypted_data = decryptData((encrypted_data, dkey, iv_key)).encode('latin-1')
+				# Decrypt the hash block
+				dec_hashes = bytearray(decryptData((enc_data[: 0x400], dkey, iv_key)).encode('latin-1'))
+				dec_hashes[1] ^= content.index
 
-				# Check our SHA1 hash
-				# Only checksum the content.size
-				found = hashlib.sha1(decrypted_data[:content.size]).digest()
-				expected = content.sha1_hash[:20]
+				# Get the starting point of each hash level
+				H0_start = (block_index % 16) * 20
+				H1_start = (16 + (block_index // 16) % 16) * 20
+				H2_start = (32 + (block_index // 256) % 16) * 20
+				H3_start = ((block_index // 4096) % 16) * 20
+
+				# Set up our IV from the H0 hash
+				iv_key = bytearray(dec_hashes[H0_start : H0_start + 16])
+
+				# Decrypt the next 0xFC00 bytes
+				dec_data = decryptData((enc_data[0x400 : ], dkey, iv_key)).encode('latin-1')
+
+				# Check our H0 hash
+				found = hashlib.sha1(dec_data).digest()
+				expected = dec_hashes[H0_start : H0_start + 20]
 				if (found != expected):
-					print("Hash mismatch")
+					print("Hash mismatch for H0 block %d" % block_index)
 					print("Expected %s" % binascii.hexlify(expected))
 					print("Found    %s" % binascii.hexlify(found))
 					exit(1)
 				else:
-					#print("Hash ok")
+					#print("Hash ok for H0 block %d" % block_index)
 					pass
 
-				# Write the decrypted file.plain
-				open(filename + ".plain", "wb").write(decrypted_data)
-		else:
-			if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
-				if not options.quiet:
-					print("Cached: %s.plain" % filename)
-			else:
-				if not options.quiet:
-					print("Decrypting: %s" % filename)
-
-				# Process in input blocks of 0x10000, output blocks of 0xFC00
-				# The first 0x400 bytes of each block contain the H0,H1,H2 hashes
-				# H0 (0-15) are repeated 16x and indexed by (block_index % 16)
-				# H1 (16-31) are repeated 256x and indexed by ((block_index / 16) % 16) ?
-				# H2 (32-47) are repeated 4096x and indexed by ((block_index / 256) % 16) ?
-				# H3 (0-N) are stored in the .h3 file and indexed by (block_index / 4096)
-				# Each hash is a 20-byte SHA1
-
-				# Read in our .h3 file
-				H3_hashes = open(filename + '.h3', 'rb').read()
-
-				# Check our SHA1 hash
-				found = hashlib.sha1(H3_hashes).digest()
-				expected = content.sha1_hash[:20]
-				if (found != expected):
-					print("Hash mismatch for .h3 file")
-					print("Expected %s" % binascii.hexlify(expected))
-					print("Found    %s" % binascii.hexlify(found))
-					exit(1)
-				else:
-					#print("Hash ok for .h3 file")
-					pass
-
-				enc_file = open(filename, 'rb')
-				dec_file = open(filename + ".plain", 'wb')
-
-				block_index = 0
-				while True:
-					#print("Block %d" % block_index)
-
-					# Read the encrypted file
-					enc_data = enc_file.read(0x10000)
-					if enc_data == '':
-						break
-					if len(enc_data) < 0x400:
-						break
-
-					# Set up our IV using the content index
-					iv_key = bytearray(b'\x00' * 16)
-					iv_key[1] = content.index
-
-					# Decrypt the hash block
-					dec_hashes = bytearray(decryptData((enc_data[: 0x400], dkey, iv_key)).encode('latin-1'))
-					dec_hashes[1] ^= content.index
-
-					# Get the starting point of each hash level
-					H0_start = (block_index % 16) * 20
-					H1_start = (16 + (block_index // 16) % 16) * 20
-					H2_start = (32 + (block_index // 256) % 16) * 20
-					H3_start = ((block_index // 4096) % 16) * 20
-
-					# Set up our IV from the H0 hash
-					iv_key = bytearray(dec_hashes[H0_start : H0_start + 16])
-
-					# Decrypt the next 0xFC00 bytes
-					dec_data = decryptData((enc_data[0x400 : ], dkey, iv_key)).encode('latin-1')
-
-					# Check our H0 hash
-					found = hashlib.sha1(dec_data).digest()
-					expected = dec_hashes[H0_start : H0_start + 20]
+				# Check our H1 hash
+				if ((block_index % 16) == 0):
+					found = hashlib.sha1(dec_hashes[H0_start : H0_start + 16 * 20]).digest()
+					expected = dec_hashes[H1_start : H1_start + 20]
 					if (found != expected):
-						print("Hash mismatch for H0 block %d" % block_index)
+						print("Hash mismatch for H1 block %d" % block_index)
 						print("Expected %s" % binascii.hexlify(expected))
 						print("Found    %s" % binascii.hexlify(found))
 						exit(1)
 					else:
-						#print("Hash ok for H0 block %d" % block_index)
+						#print("Hash ok for H1 block %d" % block_index)
 						pass
 
-					# Check our H1 hash
-					if ((block_index % 16) == 0):
-						found = hashlib.sha1(dec_hashes[H0_start : H0_start + 16 * 20]).digest()
-						expected = dec_hashes[H1_start : H1_start + 20]
-						if (found != expected):
-							print("Hash mismatch for H1 block %d" % block_index)
-							print("Expected %s" % binascii.hexlify(expected))
-							print("Found    %s" % binascii.hexlify(found))
-							exit(1)
-						else:
-							#print("Hash ok for H1 block %d" % block_index)
-							pass
+				# Check our H2 hash
+				if ((block_index % 256) == 0):
+					found = hashlib.sha1(dec_hashes[H1_start : H1_start + 16 * 20]).digest()
+					expected = dec_hashes[H2_start : H2_start + 20]
+					if (found != expected):
+						print("Hash mismatch for H2 block %d" % block_index)
+						print("Expected %s" % binascii.hexlify(expected))
+						print("Found    %s" % binascii.hexlify(found))
+						exit(1)
+					else:
+						#print("Hash ok for H2 block %d" % block_index)
+						pass
 
-					# Check our H2 hash
-					if ((block_index % 256) == 0):
-						found = hashlib.sha1(dec_hashes[H1_start : H1_start + 16 * 20]).digest()
-						expected = dec_hashes[H2_start : H2_start + 20]
-						if (found != expected):
-							print("Hash mismatch for H2 block %d" % block_index)
-							print("Expected %s" % binascii.hexlify(expected))
-							print("Found    %s" % binascii.hexlify(found))
-							exit(1)
-						else:
-							#print("Hash ok for H2 block %d" % block_index)
-							pass
+				# Check our H3 hash
+				if ((block_index % 4096) == 0):
+					found = hashlib.sha1(dec_hashes[H2_start : H2_start + 16 * 20]).digest()
+					expected = H3_hashes[H3_start : H3_start + 20]
+					if (found != expected):
+						print("Hash mismatch for H3 block %d" % block_index)
+						print("Expected %s" % binascii.hexlify(expected))
+						print("Found    %s" % binascii.hexlify(found))
+						exit(1)
+					else:
+						#print("Hash ok for H3 block %d" % block_index)
+						pass
 
-					# Check our H3 hash
-					if ((block_index % 4096) == 0):
-						found = hashlib.sha1(dec_hashes[H2_start : H2_start + 16 * 20]).digest()
-						expected = H3_hashes[H3_start : H3_start + 20]
-						if (found != expected):
-							print("Hash mismatch for H3 block %d" % block_index)
-							print("Expected %s" % binascii.hexlify(expected))
-							print("Found    %s" % binascii.hexlify(found))
-							exit(1)
-						else:
-							#print("Hash ok for H3 block %d" % block_index)
-							pass
+				# Write out the decrypted data
+				dec_file.write(dec_data)
 
-					# Write out the decrypted data
-					dec_file.write(dec_data)
+				# Count our block #
+				block_index += 1
 
-					# Count our block #
-					block_index += 1
-
-				dec_file.close()
-				enc_file.close()
+			dec_file.close()
+			enc_file.close()
 
 # Wierd design choice, return decrypted data as a string
 def decryptData(keys):
@@ -418,20 +420,19 @@ def decryptTitleKey(keys):
 
 	return dtkey
 	
-def loadContent(titledir, tmd,ckey,dkey):
+def	loadContent(titledir, tmd, ckey, dkey):
 	cache_dir = os.path.join(titledir, 'cache')
-	title = tmd.tmd_contents[0].id
-	size = tmd.tmd_contents[0].size
-	
-	contentf = open(os.path.join(cache_dir, title), 'rb').read()
-	contentf = list(contentf)
-	
-	iv_key = list(map(ord, '\x00'*16))
-	
-	data = decryptData((contentf,dkey,iv_key))
-	data = list(map(ord, list(data)))
 
-	
+	decryptContentFile(titledir, tmd, ckey, dkey, tmd.tmd_contents[0])
+
+	filename = os.path.join(cache_dir, tmd.tmd_contents[0].id + '.plain')
+
+	if not os.path.isfile(filename):
+		print("Error: can not open decrypted file %s" % filename)
+		return
+
+	data = open(filename, 'rb').read()
+
 	fst = pytmd.FST_PARSER(data)
 	fst.ReadFST()
 	fst.GetFileListFromFST()
@@ -441,6 +442,7 @@ def loadContent(titledir, tmd,ckey,dkey):
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
 	fe = fst.fe_entries[fstindex]
+
 	if not options.quiet:
 		print("Creating:  ", currentdir)
 	if not os.path.isdir(currentdir):
@@ -469,15 +471,17 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	offset = fe.f_off
 	size = fe.f_len
 	input_filename = ''
-	for t in tmd.tmd_contents:
-		if t.index == fe.content_id:
-			#print("FOUND:", t.index, "ID:", t.index)
-			input_filename = os.path.join(cache_dir, t.id + '.plain')
+	for content in tmd.tmd_contents:
+		if content.index == fe.content_id:
+			break
+	else:
+		print("Invalid content id %d" % fe.content_id)
+		return
 
-	#print("From", input_filename)
-	#print("Offset", offset, "size", size)
+	decryptContentFile(titledir, tmd, ckey, dkey, content)
+	input_filename = os.path.join(cache_dir, content.id + '.plain')
 	if (not os.path.isfile(input_filename)):
-		print('Decrypted file missing', input_filename)
+		print('Error: Decrypted file missing %s' % input_filename)
 		return
 
 	input_file = open(input_filename, 'rb')
@@ -488,12 +492,12 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	# Copy the data in chunks (some files are big compared to memory size)
 	chunk_size = 1024 * 1024
 	while size > 0:
-		data = input_file.read(chunk_size)
 		if (size < chunk_size):
-			output_file.write(data[:size])
+			data = input_file.read(size)
 		else:
-			output_file.write(data)
-		size -= chunk_size
+			data = input_file.read(chunk_size)
+		output_file.write(data)
+		size -= len(data)
 	output_file.close()
 	input_file.close()
 
@@ -550,6 +554,9 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 
 	# Copy the encrypted content files
 	for content in tmd.tmd_contents:
+
+		downloadContentFile(titledir, tmd, content)
+
 		filename = content.id
 
 		if not options.quiet:
@@ -570,6 +577,7 @@ def main():
 	parser.add_option('-q',	'--quiet',	dest='quiet',		help='quiet output',			action='store_true',		default=False)
 	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content',			action='store_true',		default=False)
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
+	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	(options, args) = parser.parse_args()
@@ -618,23 +626,22 @@ def main():
 
 		print("Decrypted Title Key:", binascii.hexlify(d_title_key))
 
+		if (options.download):
+			downloadTitles(titledir, tmd)
+
 		if (options.wup):
 			if not cetk:
 				print("Error: Packaging for WUP requires the cetk file")
 				exit(1)
-			downloadTitles(titledir, tmd)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
 		if (options.extract):
-			downloadTitles(titledir, tmd)
-			decryptContentFiles(titledir, tmd, ckey, d_title_key)
 
 			print("Reading Contents:")
 			fst = loadContent(titledir, tmd, ckey, d_title_key)
 			print("Found " + str((len(fst.fe_entries))) + " files")
 
 			extractFiles(titledir, ver, fst, tmd, ckey, d_title_key)
-
 
 
 if __name__ == "__main__":
