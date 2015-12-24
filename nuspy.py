@@ -40,6 +40,9 @@ etkey =[]			#Encrypted Title Key
 ckey =[]			#Common Key
 tkey_iv = []		#Title Key IV
 dtkey = [] 			#Decrypted Title Key
+
+# Global class to hold our CLI options, so we don't have to pass them around
+options = None
 		
 
 def downloadTMD(titledir, titleid, ver):
@@ -543,6 +546,8 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 			shutil.copy(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
 def main():
+	# Make our CLI options global so we don't have to pass them around.
+	global options
 
 	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
 	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
