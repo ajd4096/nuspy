@@ -467,10 +467,47 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 		elif (nextfe.type == 0):
 			extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex + 1)
 			fstindex += 1
+		elif (nextfe.type == 0x80):
+			extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex + 1)
+			fstindex += 1
 		else:
 			print("Unknown FST Entry type %d" % nextfe.type)
 			fstindex += 1
 	return fstindex
+
+# If type == 0x80, the name/size matches existing files.
+# The offset always seems to be 0
+# I think this is a "copy from original" check
+def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	cache_dir = os.path.join(titledir, 'cache')
+	original_dir = os.path.join(options.original, currentdir)
+	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
+	fe = fst.fe_entries[fstindex]
+	original_file = os.path.join(original_dir, fe.fn)
+	output_file = os.path.join(output_dir, fe.fn)
+
+	if not options.original:
+		return
+
+	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
+		return
+
+	if not options.quiet or options.extract_meta:
+		print("Copying:", original_file)
+
+	if not os.path.isfile(original_file):
+		print("Error: Original file not found %s" % original_file)
+		#exit(1)
+		return
+
+	if os.path.getsize(original_file) != fe.f_len:
+		print("Warning: Original file size differs %s" % original_file)
+		print("Expected: %s" % fe.f_len)
+		print("Found: %s" % os.path.getsize(original_file))
+
+	if not os.path.isdir(output_dir):
+		os.makedirs(output_dir)
+	shutil.copy(original_file, output_file)
 
 def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -615,6 +652,7 @@ def main():
 	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
+	parser.add_option('--original',	dest='original',	help='merge extracted content with original DIR',		metavar='DIR')
 	(options, args) = parser.parse_args()
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
