@@ -108,7 +108,7 @@ class TMD_CONTENT():
 		packer('>32s',	self.sha1_hash)
 
 	def	unpack(self, unpacker):
-		self.id		= '%08x' % unpacker('>I')[0]
+		self.id		= '%08X' % unpacker('>I')[0]
 		self.index	= unpacker('>H')[0]
 		self.type	= unpacker('>H')[0]
 		self.size	= unpacker('>Q')[0]
@@ -286,7 +286,7 @@ class TMD_PARSER():
 		# (We will not be using it to add/subtract/ etc)
 		# Read it in as a string
 		self.title_id			= self.unpacker('>8s')[0]
-		self.title_id_hex		= binascii.hexlify(self.title_id).decode('latin-1')
+		self.title_id_hex		= binascii.hexlify(self.title_id).decode('latin-1').upper()
 		self.tmd_title_type		= self.unpacker('>I')[0]
 		self.tmd_group_id		= self.unpacker('>H')[0]
 		self.tmd_public_save_size	= self.unpacker('>I')[0]
