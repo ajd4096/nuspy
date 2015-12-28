@@ -267,8 +267,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 			if not options.quiet:
 				print("Cached: %s.plain" % filename)
 		else:
-			if not options.quiet:
-				print("Decrypting: %s" % filename)
+			prefix = "\rDecrypting: %s" % filename
 
 			# Process in input blocks of 0x10000, output blocks of 0xFC00
 			# The first 0x400 bytes of each block contain the H0,H1,H2 hashes
@@ -296,9 +295,13 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 			enc_file = open(filename, 'rb')
 			dec_file = open(filename + ".plain", 'wb')
 
+			block_count = content.size // 0x10000
 			block_index = 0
 			while True:
-				#print("Block %d" % block_index)
+				if not options.quiet:
+					block_percent = block_index * 100 // block_count
+					sys.stdout.write("%s %2d%%" % (prefix, block_percent))
+					sys.stdout.flush()
 
 				# Read the encrypted file
 				enc_data = enc_file.read(0x10000)
@@ -386,6 +389,10 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 
 			dec_file.close()
 			enc_file.close()
+
+			if not options.quiet:
+				sys.stdout.write("%s done\n" % prefix)
+				sys.stdout.flush()
 
 # Wierd design choice, return decrypted data as a string
 def decryptData(keys):
