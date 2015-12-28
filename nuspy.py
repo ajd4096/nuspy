@@ -443,9 +443,11 @@ def	loadContent(titledir, tmd, ckey, dkey):
 
 	data = open(filename, 'rb').read()
 
-	fst = pytmd.FST_PARSER(data)
-	fst.ReadFST()
-	fst.GetFileListFromFST()
+	unpacker = pytmd.buffer_unpacker(data)
+
+	fst = pytmd.FST_PARSER()
+	fst.unpack(unpacker)
+	#print(fst)
 	
 	return fst
 

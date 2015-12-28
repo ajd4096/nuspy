@@ -357,6 +357,23 @@ class FST_CONTENT():
 		self.size = 0
 		self.unk2 = 0
 		self.unklist = []
+
+	def	__str__(self):
+		o = ""
+		o += "%X " % self.unk
+		o += "%d " % self.size
+		o += "%X " % self.unk2
+		for x in self.unklist:
+			o += "%X " % x
+		o += "\n"
+		return o
+
+	def	unpack(self, unpacker):
+		self.unk		= unpacker('>I')[0]
+		self.size		= unpacker('>I')[0]
+		self.unk2		= unpacker('>I')[0]
+		self.unklist		= unpacker('>5I')
+
 		
 class FE_ENTRY():
 	def __init__(self):
@@ -370,87 +387,84 @@ class FE_ENTRY():
 		self.content_id = 0
 		self.fn = ''
 
+	def	__str__(self):
+		o = ""
+		o += "type: %X\n" % self.type
+		o += "name_offset: %d\n" % self.name_offset
+		o += "f_off: %d\n" % self.f_off
+		o += "f_len: %d\n" % self.f_len
+		o += "parent: %s\n" % self.parent
+		o += "next: %s\n" % self.next
+		o += "flags: %X\n" % self.flags
+		o += "content_id: %d\n" % self.content_id
+		o += "fn: %s\n" % self.fn
+		return o
+
+	def	unpack(self, unpacker):
+		TypeName		= unpacker('>I')[0]
+		self.type		= TypeName >> 24
+		self.name_offset	= TypeName & 0x00FFFFFF
+		self.f_off		= unpacker('>I')[0]
+		self.f_len		= unpacker('>I')[0]
+		self.flags		= unpacker('>H')[0]
+		self.content_id		= unpacker('>H')[0]
+		self.fn			= ''
+
 class FST_PARSER(FST_CONTENT, FE_ENTRY):
-	def __init__(self, data):
-		self.data = data
-		self.mgc_num = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[:4]))
-		self.unk = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[4:8]))
-		self.ent_cnt = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[8:12]))
-		self.unk_lst = self.data[12:32]
+	def	__init__(self):
+		self.magic		= 0
+		self.unknown1		= 0
+		self.ContentCount	= 0
+		self.unknown2		= []
+		self.fst_contents	= []
+		self.fe_entries		= []
+
+	def	__str__(self):
+		o = ""
+		o += "Magic: %X\n" % self.magic
+		o += "?: %X\n" % self.unknown1
+		o += "ContentCount: %d\n" % self.ContentCount
+		for i in self.unknown2:
+			o += "?: %X\n" % i
+		for i in range(self.ContentCount):
+			o += '---\n'
+			o += "Content: %d\n" % i
+			o += str(self.fst_contents[i])
+		for i in range(len(self.fe_entries)):
+			o += '---\n'
+			o += "FE %d\n" % i
+			o += str(self.fe_entries[i])
+		return o
+
+	def	unpack(self, unpacker):
+		self.magic	= unpacker('>I')[0]
+		# Check for 'FST\0' magic number
+		if (self.magic != 0x46535400):
+			return None
+		self.unknown1	= unpacker('>I')[0]
+		self.ContentCount	= unpacker('>I')[0]
+		self.unknown2	= unpacker('>5I')
 		self.fst_contents = []
-		self.fe_entry_start = 0
-		self.fst_ent_cnt = 0
+		for i in range(self.ContentCount):
+			e = FST_CONTENT()
+			e.unpack(unpacker)
+			self.fst_contents.append(e)
+		# Get our first entry so we know how many we have
 		self.fe_entries = []
-		self.name_off = 0
-
-	
-	def GetFileListFromFST(self):
-		""" Generates file names and and them to content list
-		Adds filenames to each file_entry and adds its parent directory
-		and next directory
-		"""
-		content_index = []
-		entries = len(self.fe_entries)
-		for fe in self.fe_entries:
-			f_off = self.name_off + fe.name_offset			
-			fname = []
-			for i in range(256):
-				fname.append(self.data[f_off + i])
-				if self.data[f_off + i + 1] == 0:
+		root_entry = FE_ENTRY()
+		root_entry.unpack(unpacker)
+		self.fe_entries.append(root_entry)
+		# Parse the rest of our entries
+		for i in range(1, root_entry.f_len):
+			e = FE_ENTRY()
+			e.unpack(unpacker)
+			self.fe_entries.append(e)
+		# Go back and fill in the names
+		name_table = unpacker._buffer[unpacker._offset:]
+		for e in self.fe_entries:
+			for end in range(e.name_offset, e.name_offset + 256):
+				if name_table[end] == 0:
+					e.fn = str(name_table[e.name_offset: end])
 					break
-			fn = ''.join(map(chr,fname))
-			if fn[1:] == 'code':
-				fe.fn = fn[1:]
 			else:
-				fe.fn = fn
-			content_index.append(fe.fn)
-			if fe == 0:
-				fe.f_off = fe.f_off << 5
-
-		for fe in self.fe_entries:
-			if fe.type == 1:
-				try:
-					fe.parent = content_index[fe.f_off]
-					if fe.f_len == self.fst_ent_cnt:
-						fe.next = "EOD"
-						#print(fe.fn, fe.f_len)
-					else:
-						fe.next = content_index[fe.f_len]
-				except Exception as e:
-					print("ERROR:", fe.fn, fe.f_len, entries, self.fst_ent_cnt )
-		return
-		
-	def ReadFST(self):
-		myfst = FST_CONTENT()
-		for i in range(self.ent_cnt):
-			s_off = 0x20 + (i * 0x20)
-			myfst.unk = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+4]))
-			s_off += 0x4
-			myfst.size = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+4]))
-			s_off += 0x4
-			myfst.unk2 = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+4]))
-			s_off += 0x4
-			for j in range(0,0x14,0x04):
-				s_off += 0x4
-				myfst.unklist.append(functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off + j:s_off+j + 4])))
-			self.fst_contents.append(myfst)
-		self.fe_entry_start = (0x20 + (self.ent_cnt * 0x20))
-		self.fst_ent_cnt = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[(self.fe_entry_start + 8):(self.fe_entry_start + 8 + 4)]))
-		self.name_off = (0x20 + (self.ent_cnt *0x20) + (self.fst_ent_cnt * 0x10))
-		for i in range(0,self.fst_ent_cnt):
-			myfe = FE_ENTRY()
-			s_off = self.fe_entry_start + (i * 0x10)
-			myfe.type = self.data[s_off:(s_off + 0x01)][0]
-			s_off += 0x01
-			myfe.name_offset = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+3]))
-			s_off += 0x03
-			myfe.f_off = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+4]))
-			s_off += 0x04
-			myfe.f_len = functools.reduce(lambda x,y: (x << 8) + y, self.data[s_off:s_off+4])
-			s_off += 0x04
-			myfe.flags = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+2]))
-			s_off += 0x02
-			myfe.content_id = functools.reduce(lambda x,y: (x << 8) + y, list(self.data[s_off:s_off+2]))
-			s_off += 0x02
-			self.fe_entries.append(myfe)
-		return
+				e.fn = str(name_table[e.name_offset: end])
