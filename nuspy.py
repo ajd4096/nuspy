@@ -451,19 +451,20 @@ def	loadContent(titledir, tmd, ckey, dkey):
 
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
+	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
 	if not options.extract_meta:
 		if not options.quiet:
-			print("Creating:  ", currentdir)
-		if not os.path.isdir(currentdir):
-			os.makedirs(currentdir)
+			print("Creating:  ", output_dir)
+		if not os.path.isdir(output_dir):
+			os.makedirs(output_dir)
 
 	while (fstindex + 1 < fe.f_len):
 		nextfe = fst.fe_entries[fstindex + 1]
 		if (nextfe.type == 1 or nextfe.type == 129):
 			fstindex = extractFstDirectory(titledir, fst, tmd, ckey, dkey, os.path.join(currentdir, nextfe.fn), fstindex + 1)
-		elif (nextfe.type == 0 or nextfe.type == 128):
+		elif (nextfe.type == 0):
 			extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex + 1)
 			fstindex += 1
 		else:
@@ -473,36 +474,49 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 
 def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
+	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
 	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
 		return
 
-	filename = os.path.join(currentdir, fe.fn)
+	filename = os.path.join(output_dir, fe.fn)
 	if not options.quiet or options.extract_meta:
 		print("Extracting:", filename)
 
-	offset = fe.f_off
-	size = fe.f_len
-	input_filename = ''
+	# Find the correct content file
 	for content in tmd.tmd_contents:
 		if content.index == fe.content_id:
 			break
 	else:
-		print("Invalid content id %d" % fe.content_id)
-		return
+		print("Error: Invalid content id %d" % fe.content_id)
+		exit(1)
 
 	decryptContentFile(titledir, tmd, ckey, dkey, content)
 	input_filename = os.path.join(cache_dir, content.id + '.plain')
 	if (not os.path.isfile(input_filename)):
 		print('Error: Decrypted file missing %s' % input_filename)
-		return
+		exit(1)
+
+	# If flags = 0x400, offset is *0x20, length is ok
+	# This matches the Yaz0 starts in 0005000E1018DD00/0000001e.plain
+	offset = fe.f_off
+	size = fe.f_len
+	if fe.type == 0 and fe.flags == 0x400:
+		offset *= 0x20
+
+	# Check the size of the decrypted file
+	if offset + size > os.path.getsize(input_filename):
+		print('Error: Decrypted file too small %s' % input_filename)
+		print("File:", os.path.getsize(input_filename))
+		print(fe)
+		exit(1)
 
 	input_file = open(input_filename, 'rb')
 	input_file.seek(offset)
 
-	if not os.path.isdir(currentdir):
-		os.makedirs(currentdir)
+	if not os.path.isdir(output_dir):
+		os.makedirs(output_dir)
 	output_file = open(filename, 'wb')
 
 	# Copy the data in chunks (some files are big compared to memory size)
@@ -512,26 +526,29 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 			data = input_file.read(size)
 		else:
 			data = input_file.read(chunk_size)
+		if (len(data) == 0):
+			print("Error: unable to read %d bytes" % size)
+			exit(1)
 		output_file.write(data)
 		size -= len(data)
 	output_file.close()
 	input_file.close()
 
 def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
-	rootdir = os.path.join(titledir, 'extracted.' + ver)
+	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version)
 
 	# Start with a clean dir
-	if (os.path.exists(rootdir)):
-		shutil.rmtree(rootdir)
+	if (os.path.exists(output_dir)):
+		shutil.rmtree(output_dir)
 
-	print("Extracting files into %s" % rootdir)
+	print("Extracting files into %s" % output_dir)
 
 	# Start with the root dir at index 0
-	extractFstDirectory(titledir, fst, tmd, ckey, dkey, rootdir, 0)
+	extractFstDirectory(titledir, fst, tmd, ckey, dkey, '', 0)
 
 def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	cache_dir = os.path.join(titledir, 'cache')
-	packagedir = os.path.join(titledir, 'install.' + ver)
+	packagedir = os.path.join(titledir, 'install.' + tmd.tmd_title_version)
 
 	# Start with a clean dir
 	if (os.path.isdir(packagedir)):
