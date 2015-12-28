@@ -110,13 +110,16 @@ def	parseTMD(titledir, ver):
 	tmd = pytmd.TMD_PARSER(tmd_path)
 	tmd.ReadContent()
 	print("Parsing TMD for: %s" % tmd.title_id_hex)
+	print("Title version", tmd.tmd_title_version)
 	if not options.quiet:
 		print("Titles found:")
-		total_size = 0
 		for title in tmd.tmd_contents:
 			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
-			total_size += title.size
-		print("Total size: %s" % humansize(total_size))
+
+	total_size = 0
+	for title in tmd.tmd_contents:
+		total_size += title.size
+	print("Total size: %s" % humansize(total_size))
 
 	return tmd
 
