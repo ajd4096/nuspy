@@ -479,15 +479,15 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 # The offset always seems to be 0
 # I think this is a "copy from original" check
 def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
+	if not options.original:
+		return
+
 	cache_dir = os.path.join(titledir, 'cache')
 	original_dir = os.path.join(options.original, currentdir)
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 	original_file = os.path.join(original_dir, fe.fn)
 	output_file = os.path.join(output_dir, fe.fn)
-
-	if not options.original:
-		return
 
 	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
 		return
