@@ -464,7 +464,7 @@ class FST_PARSER(FST_CONTENT, FE_ENTRY):
 		for e in self.fe_entries:
 			for end in range(e.name_offset, e.name_offset + 256):
 				if name_table[end] == 0:
-					e.fn = str(name_table[e.name_offset: end])
+					e.fn = name_table[e.name_offset: end].decode('latin-1')
 					break
 			else:
-				e.fn = str(name_table[e.name_offset: end])
+				e.fn = name_table[e.name_offset: end].decode('latin-1')
