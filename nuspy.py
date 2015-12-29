@@ -47,7 +47,6 @@ options = None
 
 def downloadTMD(titledir, titleid, ver):
 	cache_dir = os.path.join(titledir, 'cache')
-	os.makedirs(cache_dir, exist_ok = True)
 	
 	print("Downloading TMD for:",titleid)
 
@@ -57,6 +56,9 @@ def downloadTMD(titledir, titleid, ver):
 			url = nus + titleid + r'/tmd'
 			file = os.path.join(cache_dir, 'tmd')
 			print("Downloading: %s" % url)
+			# See if we can open the URL before creating the directory
+			if urllib.request.urlopen(url):
+				os.makedirs(cache_dir, exist_ok = True)
 			urllib.request.urlretrieve(url, file)
 
 			data = open(file, 'rb').read()
@@ -72,6 +74,9 @@ def downloadTMD(titledir, titleid, ver):
 					print("Cached: %s" % file)
 			else:
 				print("Downloading: %s" % url)
+				# See if we can open the URL before creating the directory
+				if urllib.request.urlopen(url):
+					os.makedirs(cache_dir, exist_ok = True)
 				urllib.request.urlretrieve(url, file)
 
 		return ver
@@ -82,7 +87,6 @@ def downloadTMD(titledir, titleid, ver):
 
 def downloadCETK(titledir, titleid):
 	cache_dir = os.path.join(titledir, 'cache')
-	os.makedirs(cache_dir, exist_ok = True)
 
 	print("Downloading CETK for:",titleid)
 
@@ -94,6 +98,9 @@ def downloadCETK(titledir, titleid):
 				print("Cached: %s" % file)
 		else:
 			print("Downloading: %s" % url)
+			# See if we can open the URL before creating the directory
+			if urllib.request.urlopen(url):
+				os.makedirs(cache_dir, exist_ok = True)
 			urllib.request.urlretrieve(url, file)
 
 	except Exception as e:
