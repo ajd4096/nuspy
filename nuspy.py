@@ -4,6 +4,7 @@ import sys, os, shutil, pytmd, struct, functools
 import binascii
 import hashlib
 from optparse import OptionParser
+import re
 import time
 import urllib.request
 try:
@@ -672,6 +673,9 @@ def main():
 		tmd		= None
 		cetk		= None
 		keys		= []
+
+		# Make upper case, remove non-hex chars
+		titleid = re.sub('[^0-9A-F]', '', titleid.upper())
 
 		titledir = os.path.join(filedir, titleid)
 		os.makedirs(titledir, exist_ok = True)
