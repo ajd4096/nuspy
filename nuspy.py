@@ -678,7 +678,6 @@ def main():
 		titleid = re.sub('[^0-9A-F]', '', titleid.upper())
 
 		titledir = os.path.join(filedir, titleid)
-		os.makedirs(titledir, exist_ok = True)
 
 		# Download and parse the TMD file(s)
 		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
