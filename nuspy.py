@@ -489,17 +489,25 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 # The offset always seems to be 0
 # I think this is a "copy from original" check
 def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
-	if not options.original:
-		return
-
 	cache_dir = os.path.join(titledir, 'cache')
-	original_dir = os.path.join(options.original, currentdir)
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
-	original_file = os.path.join(original_dir, fe.fn)
 	output_file = os.path.join(output_dir, fe.fn)
 
+	if not options.original:
+		if options.list_content:
+			print("Copying:   ", os.path.join(currentdir, fe.fn))
+			return
+		return
+
+	original_dir = os.path.join(options.original, currentdir)
+	original_file = os.path.join(original_dir, fe.fn)
+
 	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
+		return
+
+	if options.list_content:
+		print("Copying:   ", original_file)
 		return
 
 	if not options.quiet or options.extract_meta:
@@ -528,6 +536,11 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 		return
 
 	filename = os.path.join(output_dir, fe.fn)
+
+	if options.list_content:
+		print("Extracting:", filename)
+		return
+
 	if not options.quiet or options.extract_meta:
 		print("Extracting:", filename)
 
@@ -655,9 +668,10 @@ def main():
 	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
 	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
 	parser.add_option('-q',	'--quiet',	dest='quiet',		help='quiet output',			action='store_true',		default=False)
-	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content',			action='store_true',		default=False)
+	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content files',		action='store_true',		default=False)
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
+	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
 	parser.add_option('-m',	'--meta',	dest='extract_meta',	help='extract only the meta/meta.xml',	action='store_true',		default=False)
 	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
@@ -725,7 +739,7 @@ def main():
 				exit(1)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
-		if (options.extract or options.extract_meta):
+		if (options.extract or options.extract_meta or options.list_content):
 
 			print("Reading Contents:")
 			fst = loadContent(titledir, tmd, ckey, d_title_key)
