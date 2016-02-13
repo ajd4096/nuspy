@@ -16,6 +16,8 @@ def	get_signature_type(key, value):
 		{ 'name':	b'RSA_4096_SHA256',	'value': 0x00010003,	'size': 512,	'padding': 0x3C, },
 		{ 'name':	b'RSA_2048_SHA256',	'value': 0x00010004,	'size': 256,	'padding': 0x3C, },
 		{ 'name':	b'ECDSA_SHA256',	'value': 0x00010005,	'size': 60,	'padding': 0x40, },
+		{ 'name':	b'RSA_2048_SHA256?',	'value': 0x00020004,	'size': 256,	'padding': 0x3C, },	# found in WUD
+		{ 'name':	b'RSA_2048_SHA256?',	'value': 0x00030004,	'size': 256,	'padding': 0x3C, },	# found in WUD
 	)
 	for t in signature_types:
 		if t[key] == value:
@@ -294,8 +296,8 @@ class TMD_PARSER():
 		self.tmd_reserved1		= self.unpacker('>I')[0]
 		self.tmd_srl_flag		= self.unpacker('1c')[0]
 		self.tmd_reserved2		= self.unpacker('49s')[0]
-		self.tmd_access_rights		= '%08x' % self.unpacker('>I')[0]
-		self.tmd_title_version		= '%04x' % self.unpacker('>H')[0]
+		self.tmd_access_rights		= '%08X' % self.unpacker('>I')[0]
+		self.tmd_title_version		= '%04X' % self.unpacker('>H')[0]
 		self.tmd_number_of_contents	= self.unpacker('>H')[0]
 		self.tmd_boot_index		= self.unpacker('>H')[0]
 		self.tmd_padding3		= self.unpacker('2s')[0]
