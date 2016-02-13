@@ -207,7 +207,7 @@ def	downloadContentFile(titledir, tmd, content):
 	# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
 	if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
 		if not options.quiet:
-			print("Cached:", url)
+			print("Cached:    ", url)
 	else:
 		downloadFileProgress(url, filename, content.size)
 
@@ -219,7 +219,7 @@ def	downloadContentFile(titledir, tmd, content):
 		expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
 		if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
 			if not options.quiet:
-				print("Cached:", url)
+				print("Cached:    ", url)
 		else:
 			downloadFileProgress(url, filename, expected_size)
 
@@ -237,7 +237,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 	if not content.type & 0x02:
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
 			if not options.quiet:
-				print("Cached: %s.plain" % filename)
+				print("Cached:     %s.plain" % filename)
 		else:
 			if not options.quiet:
 				print("Decrypting: %s" % filename)
@@ -273,7 +273,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 	else:
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
 			if not options.quiet:
-				print("Cached: %s.plain" % filename)
+				print("Cached:     %s.plain" % filename)
 		else:
 			prefix = "\rDecrypting: %s" % filename
 
@@ -503,7 +503,7 @@ def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 		return
 
 	if not options.quiet or options.extract_meta:
-		print("Copying:", original_file)
+		print("Copying:   ", original_file)
 
 	if not os.path.isfile(original_file):
 		print("Error: Original file not found %s" % original_file)
