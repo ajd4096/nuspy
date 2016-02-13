@@ -464,7 +464,7 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
-	if not options.extract_meta:
+	if not options.extract_meta_file and not options.extract_meta_dir:
 		if not options.quiet:
 			print("Creating:  ", output_dir)
 		if not os.path.isdir(output_dir):
@@ -503,14 +503,17 @@ def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	original_dir = os.path.join(options.original, currentdir)
 	original_file = os.path.join(original_dir, fe.fn)
 
-	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
+	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
+		return
+
+	if (options.extract_meta_dir and currentdir != 'meta'):
 		return
 
 	if options.list_content:
 		print("Copying:   ", original_file)
 		return
 
-	if not options.quiet or options.extract_meta:
+	if not options.quiet:
 		print("Copying:   ", original_file)
 
 	if not os.path.isfile(original_file):
@@ -532,7 +535,10 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
-	if (options.extract_meta and (not 'meta' in currentdir or not 'meta.xml' in fe.fn)):
+	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
+		return
+
+	if (options.extract_meta_dir and currentdir != 'meta'):
 		return
 
 	filename = os.path.join(output_dir, fe.fn)
@@ -541,7 +547,7 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 		print("Extracting:", filename)
 		return
 
-	if not options.quiet or options.extract_meta:
+	if not options.quiet:
 		print("Extracting:", filename)
 
 	# Find the correct content file
@@ -672,7 +678,8 @@ def main():
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
 	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
-	parser.add_option('-m',	'--meta',	dest='extract_meta',	help='extract only the meta/meta.xml',	action='store_true',		default=False)
+	parser.add_option('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',		action='store_true',		default=False)
+	parser.add_option('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',	action='store_true',		default=False)
 	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
@@ -739,7 +746,7 @@ def main():
 				exit(1)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
-		if (options.extract or options.extract_meta or options.list_content):
+		if (options.extract or options.extract_meta_file or options.extract_meta_dir or options.list_content):
 
 			print("Reading Contents:")
 			fst = loadContent(titledir, tmd, ckey, d_title_key)
