@@ -544,7 +544,7 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	filename = os.path.join(output_dir, fe.fn)
 
 	if options.list_content:
-		print("Extracting:", filename)
+		print("Extracting: %s (%d)" % (filename, fe.f_len))
 		return
 
 	if not options.quiet:
