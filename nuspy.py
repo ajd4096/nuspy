@@ -506,7 +506,7 @@ def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
 		return
 
-	if (options.extract_meta_dir and currentdir != 'meta'):
+	if (options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
 		return
 
 	if options.list_content:
@@ -538,7 +538,7 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
 		return
 
-	if (options.extract_meta_dir and currentdir != 'meta'):
+	if (options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
 		return
 
 	filename = os.path.join(output_dir, fe.fn)
