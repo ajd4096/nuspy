@@ -84,7 +84,7 @@ def downloadTMD(titledir, titleid, ver):
 
 	except Exception as e:
 		print("Exception:",e)
-		exit()
+		exit(1)
 
 def downloadCETK(titledir, titleid):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -106,14 +106,14 @@ def downloadCETK(titledir, titleid):
 
 	except Exception as e:
 		print("Exception:",e)
-		exit()
+		exit(1)
 
 def	parseTMD(titledir, ver):
 	cache_dir = os.path.join(titledir, 'cache')
 	tmd_path = os.path.join(cache_dir, 'tmd.' +ver)
 	if not os.path.isfile(tmd_path):
 		print("TMD File Not Found!")
-		exit()
+		exit(1)
 
 	tmd = pytmd.TMD_PARSER(tmd_path)
 	tmd.ReadContent()
