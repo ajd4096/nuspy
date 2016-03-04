@@ -3,7 +3,7 @@
 import sys, os, shutil, pytmd, struct, functools
 import binascii
 import hashlib
-from optparse import OptionParser
+import optparse
 import re
 import time
 import urllib.request
@@ -671,7 +671,22 @@ def main():
 	# Make our CLI options global so we don't have to pass them around.
 	global options
 
-	parser = OptionParser(usage='usage: %prog [options] titleid1 titleid2')
+	# Custom parser so epilog doesn't line-wrap
+	class MyParser(optparse.OptionParser):
+		def format_epilog(self, formatter):
+			return self.expand_prog_name(self.epilog)
+
+	parser = MyParser(usage='usage: %prog [options] titleid1 titleid2', epilog=
+"""
+For the lazy:
+
+Download and extract TITLEID ready for loadiine:
+%prog -e --ekey=KEY TITLEID
+
+Download and package UPDATEID ready for WUP installer:
+%prog -w UPDATEID
+
+""")
 	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
 	parser.add_option('-q',	'--quiet',	dest='quiet',		help='quiet output',			action='store_true',		default=False)
 	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content files',		action='store_true',		default=False)
@@ -687,6 +702,9 @@ def main():
 	(options, args) = parser.parse_args()
 
 	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
+
+	if not args:
+		parser.print_help()
 
 	for titleid in args:
 		ver		= options.version
