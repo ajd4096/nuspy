@@ -695,13 +695,16 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
 	parser.add_option('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',		action='store_true',		default=False)
 	parser.add_option('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',	action='store_true',		default=False)
+	parser.add_option('-b', '--basedir',	dest='basedir',	help='use DIR as base directory',		metavar='DIR')
 	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
 	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
 	parser.add_option('--original',	dest='original',	help='merge extracted content with original DIR',		metavar='DIR')
 	(options, args) = parser.parse_args()
 
-	filedir = os.getcwd()						#Get Current Working Directory  Establishes this as the root directory
+	filedir = options.basedir
+	if not filedir:
+		filedir = os.getcwd()
 
 	if not args:
 		parser.print_help()
