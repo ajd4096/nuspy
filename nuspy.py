@@ -49,14 +49,16 @@ options = None
 def downloadTMD(titledir, titleid, ver):
 	cache_dir = os.path.join(titledir, 'cache')
 	
-	print("Downloading TMD for:",titleid)
+	if not options.quiet:
+		print("Downloading TMD for:",titleid)
 
 	try:
 		if ver == None:
 			# No version specified, grab the latest (versionless tmd file)
 			url = nus + titleid + r'/tmd'
 			file = os.path.join(cache_dir, 'tmd')
-			print("Downloading: %s" % url)
+			if not options.quiet:
+				print("Downloading: %s" % url)
 			# See if we can open the URL before creating the directory
 			if urllib.request.urlopen(url):
 				os.makedirs(cache_dir, exist_ok = True)
@@ -64,7 +66,8 @@ def downloadTMD(titledir, titleid, ver):
 
 			data = open(file, 'rb').read()
 			tmdver = str((data[0x1DC] << 8) + data[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
-			print("No Version Selected, Found:",tmdver)
+			if not options.quiet:
+				print("No Version Selected, Found:",tmdver)
 			ver = tmdver
 
 		if ver != None:
@@ -74,16 +77,23 @@ def downloadTMD(titledir, titleid, ver):
 				if not options.quiet:
 					print("Cached: %s" % file)
 			else:
-				print("Downloading: %s" % url)
+				if not options.quiet:
+					print("Downloading: %s" % url)
 				# See if we can open the URL before creating the directory
-				if urllib.request.urlopen(url):
+				conn = urllib.request.urlopen(url)
+				if conn:
 					os.makedirs(cache_dir, exist_ok = True)
-				urllib.request.urlretrieve(url, file)
+					urllib.request.urlretrieve(url, file)
+					last_modified = conn.headers['Last-Modified']
+					if last_modified:
+						t = time.mktime(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
+						os.utime(file, (t,t))
 
 		return ver
 
 	except Exception as e:
-		print("Exception:",e)
+		if not options.quiet:
+			print("Exception:",e)
 		exit(1)
 
 def downloadCETK(titledir, titleid):
@@ -164,7 +174,14 @@ def	humanrate(rate):
 # Download URL to FILE, and show progress in %
 #
 def	downloadFileProgress(url, filename, expected_size):
-	prefix = "\rDownloading: %s (%s) " % (url, humansize(expected_size))
+	if (expected_size and os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
+		if not options.quiet:
+			print("Cached:    ", url)
+		return
+	if expected_size:
+		prefix = "\rDownloading: %s (%s) " % (url, humansize(expected_size))
+	else:
+		prefix = "\rDownloading: %s " % url
 	req = urllib.request.Request(url)
 	if os.path.isfile(filename):
 		file_size = os.path.getsize(filename)
@@ -174,21 +191,30 @@ def	downloadFileProgress(url, filename, expected_size):
 	sys.stdout.write("%s ..." % prefix)
 	sys.stdout.flush()
 	u = urllib.request.urlopen(req)
-	f = open(filename, 'ab')
-	while True:
-		start = time.time()
-		data = u.read(1024*1024)
-		if not data:
-			break
-		f.write(data)
-		f.flush()
-		end = time.time()
-		file_size += len(data)
-		percent = 100 * file_size // expected_size
-		rate = len(data) / (end - start)
-		sys.stdout.write("%s %2d%%  %8.8s" % (prefix, percent, humanrate(rate)))
-		sys.stdout.flush()
-	f.close()
+	if u:
+		f = open(filename, 'ab')
+		while True:
+			start = time.time()
+			data = u.read(1024*1024)
+			if not data:
+				break
+			f.write(data)
+			f.flush()
+			end = time.time()
+			file_size += len(data)
+			rate = len(data) / (end - start)
+			if expected_size:
+				percent = 100 * file_size // expected_size
+				sys.stdout.write("%s %2d%%  %8.8s   " % (prefix, percent, humanrate(rate)))
+			else:
+				sys.stdout.write("%s %8.8s   " % (prefix, humanrate(rate)))
+			sys.stdout.flush()
+		f.close()
+		# Set the file's atime, mtime
+		last_modified = u.headers['Last-Modified']
+		if last_modified:
+			t = time.mktime(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
+			os.utime(filename, (t,t))
 	sys.stdout.write("%s done\n" % prefix)
 	sys.stdout.flush()
 
@@ -205,11 +231,7 @@ def	downloadContentFile(titledir, tmd, content):
 	# If we don't have the file or it is too small, download it
 	# FIXME: there are some titles where the file is larger than the tmd content.size.
 	# For example: 0005000e1010fc00/00000001 is 32784 bytes, but content.size says 32769
-	if (os.path.isfile(filename) and os.path.getsize(filename) >= content.size):
-		if not options.quiet:
-			print("Cached:    ", url)
-	else:
-		downloadFileProgress(url, filename, content.size)
+	downloadFileProgress(url, filename, content.size)
 
 	# Fetch the .h3 files
 	if (content.type & 0x02):
@@ -217,11 +239,7 @@ def	downloadContentFile(titledir, tmd, content):
 		filename += '.h3'
 		# This should be 20 bytes for each 256MB (or part thereof)
 		expected_size = 20 * ((content.size + 0x10000000 -1) // 0x10000000)
-		if (os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
-			if not options.quiet:
-				print("Cached:    ", url)
-		else:
-			downloadFileProgress(url, filename, expected_size)
+		downloadFileProgress(url, filename, expected_size)
 
 	return
 
@@ -626,11 +644,11 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	# Copy our tmd, cetk files
 	if not options.quiet:
 		print("Copying: title.tmd")
-	shutil.copy(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
+	shutil.copy2(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
 
 	if not options.quiet:
 		print("Copying: title.tik")
-	shutil.copy(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
+	shutil.copy2(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
 
 	# Copy the certs from the tmd, cetk files
 	if not options.quiet:
@@ -660,12 +678,12 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 
 		if not options.quiet:
 			print("Copying: %s" % filename)
-		shutil.copy(os.path.join(cache_dir, filename),       os.path.join(packagedir, filename + '.app'))
+		shutil.copy2(os.path.join(cache_dir, filename),       os.path.join(packagedir, filename + '.app'))
 		# If the content has a .h3, copy that too
 		if (content.type & 0x02):
 			if not options.quiet:
 				print("Copying: %s" % filename + '.h3')
-			shutil.copy(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
+			shutil.copy2(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
 def main():
 	# Make our CLI options global so we don't have to pass them around.
