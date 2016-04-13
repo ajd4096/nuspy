@@ -2,13 +2,16 @@
 
 import sys, os, shutil, pytmd, struct, functools
 import binascii
+import	bs4
 import hashlib
 import optparse
 import re
+import requests
+import sqlite3
 import time
 import urllib.request
 try:
-	#Completely borrowed the Cyrpto.Cipher idea from 
+	#Completely borrowed the Cyrpto.Cipher idea from
 	#zecoxao from gbatemp.  His documentation of it really
 	#made it easy.  I was using the aes implementation included
 	#but its painfully slow
@@ -23,14 +26,14 @@ credits = """
 	Data is no longer pulled from Wii U Impersonator! Yay!
 	Data is now directly downloaded and parsed from the TMD ticket
 	Thanks to fail0verfl0w for their efforts! Still thanks to them!
-	Thanks WulfySytlez, Bug_Checker_, NWPlayer123. 
-	Especially to Crediar for the CDecrypt source that was easy to 
+	Thanks WulfySytlez, Bug_Checker_, NWPlayer123.
+	Especially to Crediar for the CDecrypt source that was easy to
 	read, informative and documented well enough!
 	Coded by Onion_Knight
 	"""
 
 #Variables
-nus = r'http://nus.cdn.shop.wii.com/ccs/download/' 
+nus = r'http://nus.cdn.shop.wii.com/ccs/download/'
 
 #KEYS
 etkey_hex =''
@@ -54,21 +57,40 @@ def downloadTMD(titledir, titleid, ver):
 
 	try:
 		if ver == None:
-			# No version specified, grab the latest (versionless tmd file)
-			url = nus + titleid + r'/tmd'
-			file = os.path.join(cache_dir, 'tmd')
-			if not options.quiet:
-				print("Downloading: %s" % url)
-			# See if we can open the URL before creating the directory
-			if urllib.request.urlopen(url):
-				os.makedirs(cache_dir, exist_ok = True)
-			urllib.request.urlretrieve(url, file)
+			# No version specified
+			if options.tagaya:
+				# Get the version from our DB
+				conn = sqlite3.connect('tagaya.db')
+				csr = conn.cursor()
+				csr.execute('''SELECT IFNULL(MAX(title_version), 0) FROM region_title_info WHERE title_id = ?''', [titleid])
+				data = csr.fetchone()[0]
+				conn.close()
+				if not options.quiet:
+					print("No Version Selected, Found:", data)
+				ver = "%d" % data
+			else:
+				# Grab the latest (versionless tmd file)
+				# Note that this may not be the most recent
+				url = nus + titleid + r'/tmd'
+				file = os.path.join(cache_dir, 'tmd')
+				if not options.quiet:
+					print("Downloading: %s" % url)
+				# See if we can open the URL before creating the directory
+				conn = urllib.request.urlopen(url)
+				if conn:
+					os.makedirs(cache_dir, exist_ok = True)
+					urllib.request.urlretrieve(url, file)
+					# Set the file's timestamp to the URL's Last-Modified
+					last_modified = conn.headers['Last-Modified']
+					if last_modified:
+						t = time.mktime(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
+						os.utime(file, (t,t))
 
-			data = open(file, 'rb').read()
-			tmdver = str((data[0x1DC] << 8) + data[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
-			if not options.quiet:
-				print("No Version Selected, Found:",tmdver)
-			ver = tmdver
+					data = open(file, 'rb').read()
+					tmdver = str((data[0x1DC] << 8) + data[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
+					if not options.quiet:
+						print("No Version Selected, Found:",tmdver)
+					ver = tmdver
 
 		if ver != None:
 			url = nus + titleid + r'/tmd.'+ver
@@ -84,6 +106,7 @@ def downloadTMD(titledir, titleid, ver):
 				if conn:
 					os.makedirs(cache_dir, exist_ok = True)
 					urllib.request.urlretrieve(url, file)
+					# Set the file's timestamp to the URL's Last-Modified
 					last_modified = conn.headers['Last-Modified']
 					if last_modified:
 						t = time.mktime(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
@@ -445,7 +468,7 @@ def decryptData(keys):
 			decrypted = moo.decrypt(data, None, mode, d_crypt_key, keysize, iv_key)
 		except Exception as e:
 			print(e)
-	return decrypted 
+	return decrypted
 
 def decryptTitleKey(keys):
 
@@ -685,6 +708,99 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 				print("Copying: %s" % filename + '.h3')
 			shutil.copy2(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
+def	update_tagaya_db():
+
+	#conn = sqlite3.connect(':memory:')
+	conn = sqlite3.connect('tagaya.db')
+
+	csr = conn.cursor()
+
+	# Create our tables
+	csr.execute('''CREATE TABLE IF NOT EXISTS region_list_info (
+			region		TEXT,
+			list_version	INTEGER,
+			last_modified	INTEGER,
+			PRIMARY KEY (region, list_version)
+		)''')
+
+	csr.execute('''CREATE TABLE IF NOT EXISTS region_title_info (
+			region		TEXT,
+			title_id	TEXT,
+			title_version	INTEGER,
+			list_version	INTEGER,
+			PRIMARY KEY(region, title_id, title_version)
+		)''')
+
+	conn.commit()
+
+
+	for r in ['JAP', 'USA', 'EUR']:
+		fqdn='tagaya.wup.shop.nintendo.net'
+		current_v = 1
+
+		# Get the "latest_version" file direct from Nintendo
+		if r == "JAP":
+			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/JAP/JP/latest_version"
+		elif r == "USA":
+			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/USA/US/latest_version"
+		elif r == "EUR":
+			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/EUR/EU/latest_version"
+
+		# Pig-headed library developer who think their use-case applies to everyone can fuck off.
+		# Sometimes we really, truly do want to ignore the SSL cert.
+		requests.packages.urllib3.disable_warnings()
+
+		print("Fetching %s" % url)
+		html = requests.get(url, verify=False)
+		if html:
+			soup = bs4.BeautifulSoup(html.text, "html.parser")
+			current_v	= int(soup.version.string)
+			fqdn		= soup.fqdn.string
+
+		# Get the highest version we have seen
+		csr = conn.cursor()
+		csr.execute('''SELECT IFNULL(MAX(list_version), 1) FROM region_list_info WHERE region = ?''', [r])
+		highest_v = int(csr.fetchone()[0])
+		#print(highest_v, current_v)
+
+		for list_v in range(highest_v +1, current_v +1):
+			# Get the "NNN.versionlist" file from the CDN
+			if r == "JAP":
+				url	= "https://%s/tagaya/versionlist/JAP/JP/list/%s.versionlist" % (fqdn, list_v)
+			elif r == "USA":
+				url	= "https://%s/tagaya/versionlist/USA/US/list/%s.versionlist" % (fqdn, list_v)
+			elif r == "EUR":
+				url	= "https://%s/tagaya/versionlist/EUR/EU/list/%s.versionlist" % (fqdn, list_v)
+
+			#print(r, url)
+			print("Fetching %s" % url)
+			requests.packages.urllib3.disable_warnings()
+			html = requests.get(url, verify=False)
+			if html:
+				# Get the time from the URL's Last-Modified header if it exists
+				last_modified = html.headers['Last-Modified']
+				if last_modified:
+					# Get the time as seconds-since-epoch UTC
+					t = calendar.timegm(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
+				else:
+					t = 0
+				#print(r, list_v, t)
+				csr.execute("INSERT OR IGNORE INTO region_list_info VALUES (?, ?, ?)", (r, list_v, t))
+
+				soup = bs4.BeautifulSoup(html.text, "html.parser")
+				#print(soup)
+				titles = soup.find("titles")
+				#print(titles)
+				for title in titles.findAll("title"):
+					#print(title)
+					title_i	= title.find("id").string
+					title_v	= title.find("version").string
+					#print(r, title_i, title_v, list_v)
+					csr.execute("INSERT OR IGNORE INTO region_title_info VALUES (?, ?, ?, ?)", (r, title_i, title_v, list_v))
+				conn.commit()
+	# Close the DB connection
+	conn.close()
+
 def main():
 	# Make our CLI options global so we don't have to pass them around.
 	global options
@@ -711,6 +827,7 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
 	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
+	parser.add_option('-t',	'--tagaya',	dest='tagaya',		help='update title DB from tagaya',	action='store_true',		default=False)
 	parser.add_option('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',		action='store_true',		default=False)
 	parser.add_option('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',	action='store_true',		default=False)
 	parser.add_option('-b', '--basedir',	dest='basedir',	help='use DIR as base directory',		metavar='DIR')
@@ -723,6 +840,9 @@ Download and package UPDATEID ready for WUP installer:
 	filedir = options.basedir
 	if not filedir:
 		filedir = os.getcwd()
+
+	if options.tagaya:
+		update_tagaya_db()
 
 	if not args:
 		parser.print_help()
