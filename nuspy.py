@@ -3,6 +3,7 @@
 import sys, os, shutil, pytmd, struct, functools
 import binascii
 import	bs4
+import	csv
 import hashlib
 import optparse
 import re
@@ -708,7 +709,7 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 				print("Copying: %s" % filename + '.h3')
 			shutil.copy2(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
-def	update_tagaya_db():
+def	update_db_tagaya():
 
 	#conn = sqlite3.connect(':memory:')
 	conn = sqlite3.connect('tagaya.db')
@@ -750,7 +751,8 @@ def	update_tagaya_db():
 		# Sometimes we really, truly do want to ignore the SSL cert.
 		requests.packages.urllib3.disable_warnings()
 
-		print("Fetching %s" % url)
+		if not options.quiet:
+			print("Fetching %s" % url)
 		html = requests.get(url, verify=False)
 		if html:
 			soup = bs4.BeautifulSoup(html.text, "html.parser")
@@ -773,7 +775,8 @@ def	update_tagaya_db():
 				url	= "https://%s/tagaya/versionlist/EUR/EU/list/%s.versionlist" % (fqdn, list_v)
 
 			#print(r, url)
-			print("Fetching %s" % url)
+			if not options.quiet:
+				print("Fetching %s" % url)
 			requests.packages.urllib3.disable_warnings()
 			html = requests.get(url, verify=False)
 			if html:
@@ -800,6 +803,67 @@ def	update_tagaya_db():
 				conn.commit()
 	# Close the DB connection
 	conn.close()
+
+def	update_db_titlekeys():
+
+	#conn = sqlite3.connect(':memory:')
+	conn = sqlite3.connect('titlekeys.db')
+
+	csr = conn.cursor()
+
+	# Create our tables
+	csr.execute('''CREATE TABLE IF NOT EXISTS title_keys (
+		name		TEXT,
+		region		TEXT,
+		size_rpx	REAL,
+		size_rpls	REAL,
+		size_content	REAL,
+		key_wud		TEXT,
+		key_nus		TEXT,
+		game_id		TEXT,
+		languages	TEXT,
+		title_id	TEXT,
+		version		INTEGER,
+		comment		TEXT,
+		PRIMARY KEY (title_id)
+		)''')
+
+	conn.commit()
+
+
+	url = "https://docs.google.com/spreadsheets/d/1l427nnapxKEUBA-aAtiwAq1Kw6lgRV-hqdocpKY6vQ0/export?format=csv"
+	if not options.quiet:
+		print("Fetching %s" % url)
+	html = requests.get(url)
+	if html:
+		# Using DictReader isn't much of an advantage - if the table headers change the code needs fixing anyway :|
+		reader = csv.DictReader(html.text.splitlines())
+		for line in reader:
+			#print(type(line), line)
+			csr.execute("INSERT OR IGNORE INTO title_keys VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+				line['Game'],
+				line['Region'],
+				line['RPX (MBs)'],
+				line['RPLs (MBs)'],
+				line['Content (GBs)'],
+				line['WUD key'],
+				line['NUS key (encrypted)'],
+				line['Game ID'],
+				line['Languages'],
+				line['Title ID'],
+				line['Version'],
+				line['Comment'],
+				))
+		conn.commit()
+
+def	get_ekey_from_titlekeys(titleid):
+	# Get the version from our DB
+	conn = sqlite3.connect('titlekeys.db')
+	csr = conn.cursor()
+	csr.execute('''SELECT key_wud FROM title_keys WHERE title_id = ?''', [titleid])
+	data = csr.fetchone()[0]
+	conn.close()
+	return data
 
 def main():
 	# Make our CLI options global so we don't have to pass them around.
@@ -828,6 +892,7 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
 	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
 	parser.add_option('-t',	'--tagaya',	dest='tagaya',		help='update title DB from tagaya',	action='store_true',		default=False)
+	parser.add_option(      '--titlekeys',	dest='titlekeys',	help='update titlekeys DB from G docs',	action='store_true',		default=False)
 	parser.add_option('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',		action='store_true',		default=False)
 	parser.add_option('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',	action='store_true',		default=False)
 	parser.add_option('-b', '--basedir',	dest='basedir',	help='use DIR as base directory',		metavar='DIR')
@@ -842,7 +907,10 @@ Download and package UPDATEID ready for WUP installer:
 		filedir = os.getcwd()
 
 	if options.tagaya:
-		update_tagaya_db()
+		update_db_tagaya()
+
+	if options.titlekeys:
+		update_db_titlekeys()
 
 	if not args:
 		parser.print_help()
@@ -881,18 +949,27 @@ Download and package UPDATEID ready for WUP installer:
 			title_iv = tmd.title_id + b'\x00' * 8
 			keys = ( binascii.unhexlify(options.enc_title_key), ckey, title_iv)
 			d_title_key = decryptTitleKey(keys)
-
 		else:
-			# Download and parse the CETK file
-			downloadCETK(titledir, titleid)
-			cetk = parseCETK(titledir)
+			# Check our titlekeys DB
+			ekey = get_ekey_from_titlekeys(titleid)
+			if ekey:
+				print("Using encrypted title key from DB: %s" % ekey)
+				# Decrypt the encrypted title key using the common key and the title ID
+				title_iv = tmd.title_id + b'\x00' * 8
+				keys = ( binascii.unhexlify(ekey), ckey, title_iv)
+				d_title_key = decryptTitleKey(keys)
+			else:
+				# Try without any key
+				# Download and parse the CETK file
+				downloadCETK(titledir, titleid)
+				cetk = parseCETK(titledir)
 
-			print("Using cetk key: %s" % binascii.hexlify(cetk.title_key))
+				print("Using cetk key: %s" % binascii.hexlify(cetk.title_key))
 
-			# Decrypt the encrypted title key using the common key and the title ID
-			title_iv = tmd.title_id + b'\x00' * 8
-			keys = (cetk.title_key, ckey, title_iv)
-			d_title_key = decryptTitleKey(keys)
+				# Decrypt the encrypted title key using the common key and the title ID
+				title_iv = tmd.title_id + b'\x00' * 8
+				keys = (cetk.title_key, ckey, title_iv)
+				d_title_key = decryptTitleKey(keys)
 
 		print("Decrypted Title Key:", binascii.hexlify(d_title_key))
 
