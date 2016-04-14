@@ -862,7 +862,7 @@ def	get_ekey_from_titlekeys(titleid):
 	# Get the version from our DB
 	conn = sqlite3.connect('titlekeys.db')
 	csr = conn.cursor()
-	csr.execute('''SELECT key_wud FROM title_keys WHERE title_id = ?''', [titleid])
+	csr.execute('''SELECT key_nus FROM title_keys WHERE title_id = ?''', [titleid])
 	data = csr.fetchone()
 	conn.close()
 	if data:
