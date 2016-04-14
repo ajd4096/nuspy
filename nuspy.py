@@ -3,6 +3,7 @@
 import sys, os, shutil, pytmd, struct, functools
 import binascii
 import	bs4
+import	calendar
 import	csv
 import hashlib
 import optparse
@@ -936,7 +937,7 @@ Download and package UPDATEID ready for WUP installer:
 		else:
 			ckey_hex = b'D7B00402659BA2ABD2CB0DB27FA2B656'
 		if not options.quiet:
-			print("Using common key: %s" % options.common_key)
+			print("Using common key: %s" % ckey_hex)
 		ckey = binascii.unhexlify(ckey_hex)
 
 		if options.dec_title_key:
