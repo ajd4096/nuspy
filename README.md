@@ -22,6 +22,9 @@ Without this, the crypto takes forever.
 This isn't installed by default, and isn't in most distro's package lists.
 You will probably have to use pip.
 
+## sqlite3
+Probably installed when you installed Python 3.
+
 -----
 
 # For the lazy:
@@ -33,3 +36,11 @@ nuspy.py -e --ekey=KEY TITLEID
 Download and package UPDATEID ready for WUP installer:
 
 nuspy.py -w UPDATEID
+
+-----
+# Warning:
+
+This now stashes info in a few sqlite3 DBs.
+* I make *zero* promises to keep it the same across updates.
+* If I remember, I might check in a new one.
+* If it doesn't work, remove the .db files and build your own.

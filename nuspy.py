@@ -64,7 +64,7 @@ def downloadTMD(titledir, titleid, ver):
 				# Get the version from our DB
 				conn = sqlite3.connect('tagaya.db')
 				csr = conn.cursor()
-				csr.execute('''SELECT IFNULL(MAX(title_version), 0) FROM region_title_info WHERE title_id = ?''', [titleid])
+				csr.execute('''SELECT IFNULL(MAX(title_version), 0) FROM title_info WHERE title_id = ?''', [titleid])
 				data = csr.fetchone()[0]
 				conn.close()
 				if not options.quiet:
@@ -718,25 +718,24 @@ def	update_db_tagaya():
 	csr = conn.cursor()
 
 	# Create our tables
-	csr.execute('''CREATE TABLE IF NOT EXISTS region_list_info (
-			region		TEXT,
+	csr.execute('''CREATE TABLE IF NOT EXISTS list_info (
 			list_version	INTEGER,
 			last_modified	INTEGER,
-			PRIMARY KEY (region, list_version)
+			PRIMARY KEY (list_version)
 		)''')
 
-	csr.execute('''CREATE TABLE IF NOT EXISTS region_title_info (
-			region		TEXT,
+	csr.execute('''CREATE TABLE IF NOT EXISTS title_info (
 			title_id	TEXT,
 			title_version	INTEGER,
 			list_version	INTEGER,
-			PRIMARY KEY(region, title_id, title_version)
+			PRIMARY KEY(title_id, title_version)
 		)''')
 
 	conn.commit()
 
-
-	for r in ['JAP', 'USA', 'EUR']:
+	# I have checked every versionlist for each region - they are always the same.
+	#for r in ['JAP', 'USA', 'EUR']:
+	for r in ['JAP']:
 		fqdn='tagaya.wup.shop.nintendo.net'
 		current_v = 1
 
@@ -762,9 +761,11 @@ def	update_db_tagaya():
 
 		# Get the highest version we have seen
 		csr = conn.cursor()
-		csr.execute('''SELECT IFNULL(MAX(list_version), 1) FROM region_list_info WHERE region = ?''', [r])
+		csr.execute('''SELECT IFNULL(MAX(list_version), 1) FROM list_info''')
 		highest_v = int(csr.fetchone()[0])
-		#print(highest_v, current_v)
+		if not options.quiet:
+			print("Current list version: %d" % current_v)
+			print("Highest list version in DB: %d" % highest_v)
 
 		for list_v in range(highest_v +1, current_v +1):
 			# Get the "NNN.versionlist" file from the CDN
@@ -789,7 +790,7 @@ def	update_db_tagaya():
 				else:
 					t = 0
 				#print(r, list_v, t)
-				csr.execute("INSERT OR IGNORE INTO region_list_info VALUES (?, ?, ?)", (r, list_v, t))
+				csr.execute("INSERT OR IGNORE INTO list_info VALUES (?, ?)", (list_v, t))
 
 				soup = bs4.BeautifulSoup(html.text, "html.parser")
 				#print(soup)
@@ -800,7 +801,7 @@ def	update_db_tagaya():
 					title_i	= title.find("id").string
 					title_v	= title.find("version").string
 					#print(r, title_i, title_v, list_v)
-					csr.execute("INSERT OR IGNORE INTO region_title_info VALUES (?, ?, ?, ?)", (r, title_i, title_v, list_v))
+					csr.execute("INSERT OR IGNORE INTO title_info VALUES (?, ?, ?)", (title_i, title_v, list_v))
 				conn.commit()
 	# Close the DB connection
 	conn.close()
@@ -862,9 +863,10 @@ def	get_ekey_from_titlekeys(titleid):
 	conn = sqlite3.connect('titlekeys.db')
 	csr = conn.cursor()
 	csr.execute('''SELECT key_wud FROM title_keys WHERE title_id = ?''', [titleid])
-	data = csr.fetchone()[0]
+	data = csr.fetchone()
 	conn.close()
-	return data
+	if data:
+		return data[0]
 
 def main():
 	# Make our CLI options global so we don't have to pass them around.
