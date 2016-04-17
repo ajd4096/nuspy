@@ -85,7 +85,7 @@ def	update_db_wiiubrew():
 			# Strip notes if it only contains '-'
 			if notes == '-':
 				notes = ''
-			print(title_id, description, notes, versions, region)
+			#print(title_id, description, notes, versions, region)
 			csr.execute("INSERT OR REPLACE INTO system_titles VALUES (?, ?, ?, ?, ?)", (
 				title_id,
 				description,
