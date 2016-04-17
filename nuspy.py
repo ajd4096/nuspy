@@ -747,13 +747,24 @@ def	update_db_tagaya():
 		elif r == "EUR":
 			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/EUR/EU/latest_version"
 
-		# Pig-headed library developer who think their use-case applies to everyone can fuck off.
-		# Sometimes we really, truly do want to ignore the SSL cert.
-		requests.packages.urllib3.disable_warnings()
+		# Using Nintendo server certs from 0005001B-10054000, converted using
+		'''
+		# Bundle server cert files from updates/0005001B10054000/extracted/content/scerts/
+		BUNDLE=nintendo_cert_bundle.pem
+		rm -f $BUNDLE
+		for X in CACERT_NINTENDO_*.der; do
+			openssl x509 -inform DER -in $X -outform PEM >> $BUNDLE
+		done
+
+		# Check the bundle works
+		if echo -n "" | openssl s_client -connect tagaya.wup.shop.nintendo.net:443 -CAfile $BUNDLE; then
+			echo "Bundle OK"
+		fi
+		'''
 
 		if not options.quiet:
 			print("Fetching %s" % url)
-		html = requests.get(url, verify=False)
+		html = requests.get(url, verify='nintendo_cert_bundle.pem')
 		if html:
 			soup = bs4.BeautifulSoup(html.text, "html.parser")
 			current_v	= int(soup.version.string)
@@ -916,7 +927,8 @@ Download and package UPDATEID ready for WUP installer:
 		update_db_titlekeys()
 
 	if not args:
-		parser.print_help()
+		if not options.tagaya and not options.titlekeys:
+			parser.print_help()
 
 	for titleid in args:
 		ver		= options.version
