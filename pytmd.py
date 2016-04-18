@@ -251,7 +251,7 @@ class	CETK():
 		self.unpack(unpacker)
 
 	def	unpack(self, unpacker):
-		print("len %d" % len(unpacker._buffer))
+		#print("len %d" % len(unpacker._buffer))
 		if DEBUG_UNPACKING:
 			print("sig:")
 		self.signature.unpack(unpacker)
@@ -566,53 +566,72 @@ class FST_PARSER(FST_CONTENT, FE_ENTRY):
 			else:
 				e.fn = name_table[e.name_offset: end].decode('latin-1')
 
-class	ANCAST_HEADER(collections.OrderedDict):
+# ANCAST info taken from:
+# http://wiiubrew.org/wiki/Ancast_Image
+class	ANCAST_HEADER():
 	def	__init__(self):
-		self = {}
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print(name, value)
+		self._data[name] = value
+
+	def	__str__(self):
+		o = ""
+		o += str(self._data)
+		return o
+
 	def	unpack(self, unpacker):
-		self['magic']	= unpacker('>I')[0]
-		if self['magic'] != 0xEFA282D9:
+		self.magic			= unpacker('>I')[0]
+		if self.magic != 0xEFA282D9:
 			return None
-		self['null1']			= unpacker('>I')[0]
-		self['signature_offset']	= unpacker('>I')[0]
-		self['null2']			= unpacker('>I')[0]
-		self['null3']			= unpacker('%ds' % 0x10)[0]
-		unpacker.seek(self['signature_offset'])
-		self['signature_type']		= unpacker('>I')[0]
-		if self['signature_type'] == 1:
+		self.null1			= unpacker('>I')[0]
+		self.signature_offset		= unpacker('>I')[0]
+		self.null2			= unpacker('>I')[0]
+		self.null3			= unpacker('16s')[0]
+		unpacker.seek(self.signature_offset)
+		self.signature_type		= unpacker('>I')[0]
+		if self.signature_type == 1:
 			# PPC ancast
-			self['signature']	= unpacker('%ds' % 0x38)[0]
-			self['padding1']	= unpacker('%ds' % 0x44)[0]
-		elif self['signature_type'] == 2:
+			self.signature		= unpacker('%ds' % 0x38)[0]
+			self.padding1		= unpacker('%ds' % 0x44)[0]
+		elif self.signature_type == 2:
 			# ARM
-			self['signature']	= unpacker('%ds' % 0x100)[0]
-			self['padding1']	= unpacker('%ds' % 0x7C)[0]
+			self.signature		= unpacker('%ds' % 0x100)[0]
+			self.padding1		= unpacker('%ds' % 0x7C)[0]
 		else:
-			print("Unknown signature type 0x%X" % self['signature_type'])
-		self['null4']		= unpacker('>H')[0]
-		self['null4']		= unpacker('>B')[0]
-		self['null4']		= unpacker('>B')[0]
-		self['unknown']		=  unpacker('>I')[0]
-		self['hash_type']	=  unpacker('>I')[0]
-		self['body_size']	=  unpacker('>I')[0]
-		self['body_hash']	=  unpacker('%ds' % 0x14)[0]
-		if self['signature_type'] == 1:
-			self['padding5']	= unpacker('%ds' % 0x3C)[0]
-		elif self['signature_type'] == 2:
-			self['version']		= unpacker('>I')[0]
-			self['padding5']	= unpacker('%ds' % 0x38)[0]
-		self['body']		=  unpacker('%ds' % self['body_size'])[0]
+			print("Unknown signature type 0x%X" % self.signature_type)
+		self.null4			= unpacker('>H')[0]
+		self.null5			= unpacker('>B')[0]
+		self.null6			= unpacker('>B')[0]
+		self.unknown			= unpacker('>I')[0]
+		self.hash_type			= unpacker('>I')[0]
+		self.body_size			= unpacker('>I')[0]
+		self.body_hash			= unpacker('20s')[0]
+		if self.signature_type == 1:
+			self.padding5		= unpacker('%ds' % 0x3C)[0]
+		elif self.signature_type == 2:
+			self.version		= unpacker('>I')[0]
+			self.padding5		= unpacker('%ds' % 0x38)[0]
+		self.body			= unpacker('%ds' % self.body_size)[0]
 		# Fill in the keys
-		if self['signature_type'] == 1:
-			if self['unknown'] == 0x11:
+		if self.signature_type == 1:
+			if self.unknown == 0x11:
 				# WiiU
-				self['key'] = b'805E6285CD487DE0FAFFAA65A6985E17'
-				self['iv']  = b'596D5A9AD705F94FE158026FEAA7B887'
-			elif self['unknown'] == 0x13:
+				self.key = b'805E6285CD487DE0FAFFAA65A6985E17'
+				self.iv  = b'596D5A9AD705F94FE158026FEAA7B887'
+			elif self.unknown == 0x13:
 				# vWii
-				self['key'] = b'2EFE8ABCEDBB7BAAE3C0ED92FA29F866'
-				self['iv']  = b'596D5A9AD705F94FE158026FEAA7B887'
-		elif self['signature_type'] == 2:
-			# ARM
-			self['key'] = b'B5D8AB06ED7F6CFC529F2CE1B4EA32FD'
-			self['iv']  = b'91C9D008312851EF6B228BF14BAD4322'
+				self.key = b'2EFE8ABCEDBB7BAAE3C0ED92FA29F866'
+				self.iv  = b'596D5A9AD705F94FE158026FEAA7B887'
+		elif self.signature_type == 2:
+			if self.unknown == 0x21:
+				# ARM
+				self.key = b'B5D8AB06ED7F6CFC529F2CE1B4EA32FD'
+				self.iv  = b'91C9D008312851EF6B228BF14BAD4322'

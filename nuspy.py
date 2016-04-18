@@ -513,12 +513,10 @@ def	loadContent(titledir, ver, tmd, ckey, dkey):
 		extractFiles(titledir, ver, fst, tmd, ckey, dkey)
 
 	elif magic == 0xEFA282D9:
-		print("Ancast image")
 		hdr = pytmd.ANCAST_HEADER()
 		hdr.unpack(unpacker)
 		#print(type(hdr), hdr)
 		extractAncastImage(titledir, ver, tmd, hdr)
-		return None
 
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -688,19 +686,23 @@ def	extractAncastImage(titledir, ver, tmd, header):
 
 	# Build our filename
 	filename = os.path.join(output_dir, "image")
-	if header['signature_type'] == 1:
+	if header.signature_type == 1:
 		filename += '.ppc'
-	elif header['signature_type'] == 2:
+	elif header.signature_type == 2:
 		filename += '.arm'
 
 	# Decrypt the data
-	decrypted_data = decryptData((header['body'], binascii.unhexlify(header['key']), binascii.unhexlify(header['iv']))).encode('latin-1')
+	decrypted_data = decryptData((header.body, binascii.unhexlify(header.key), binascii.unhexlify(header.iv))).encode('latin-1')
 
-	# Write out the single image file.
+	# Write out the raw data
+	output_file = open(filename + '.raw', 'wb')
+	output_file.write(header.body)
+	output_file.close()
+
+	# Write out the decrypted data
 	output_file = open(filename, 'wb')
 	output_file.write(decrypted_data)
 	output_file.close()
-
 
 def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	cache_dir = os.path.join(titledir, 'cache')
