@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import sys, os, shutil, pytmd, struct, functools
+import	argparse
 import binascii
 import	bs4
 import	calendar
 import	csv
 import hashlib
-import optparse
 import re
 import requests
 import sqlite3
@@ -942,38 +942,39 @@ def main():
 	# Make our CLI options global so we don't have to pass them around.
 	global options
 
-	# Custom parser so epilog doesn't line-wrap
-	class MyParser(optparse.OptionParser):
-		def format_epilog(self, formatter):
-			return self.expand_prog_name(self.epilog)
-
-	parser = MyParser(usage='usage: %prog [options] titleid1 titleid2', epilog=
+	parser = argparse.ArgumentParser(
+		prog='nuspy.py',
+		formatter_class=argparse.RawDescriptionHelpFormatter,
+		description='Download, extract, and decrypt NUS files',
+		epilog=
 """
 For the lazy:
 
 Download and extract TITLEID ready for loadiine:
-%prog -e --ekey=KEY TITLEID
+%(prog)s -e --ekey=KEY TITLEID
 
 Download and package UPDATEID ready for WUP installer:
-%prog -w UPDATEID
+%(prog)s -w UPDATEID
 
 """)
-	parser.add_option('-v',	'--version',	dest='version',		help='download VERSION or latest if not specified',		metavar='VERSION')
-	parser.add_option('-q',	'--quiet',	dest='quiet',		help='quiet output',			action='store_true',		default=False)
-	parser.add_option('-e',	'--extract',	dest='extract',		help='extract content files',		action='store_true',		default=False)
-	parser.add_option('-w',	'--wup',	dest='wup',		help='pack for WUP installer',		action='store_true',		default=False)
-	parser.add_option('-d',	'--download',	dest='download',	help='download all files at once',	action='store_true',		default=False)
-	parser.add_option('-l',	'--list',	dest='list_content',	help='list content files',		action='store_true',		default=False)
-	parser.add_option('-t',	'--tagaya',	dest='tagaya',		help='update title DB from tagaya',	action='store_true',		default=False)
-	parser.add_option(      '--titlekeys',	dest='titlekeys',	help='update titlekeys DB from G docs',	action='store_true',		default=False)
-	parser.add_option('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',		action='store_true',		default=False)
-	parser.add_option('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',	action='store_true',		default=False)
-	parser.add_option('-b', '--basedir',	dest='basedir',	help='use DIR as base directory',		metavar='DIR')
-	parser.add_option('--ckey',	dest='common_key',	help='use HEXKEY as common key',		metavar='HEXKEY')
-	parser.add_option('--dkey',	dest='dec_title_key',	help='use decrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
-	parser.add_option('--ekey',	dest='enc_title_key',	help='use encrypted TITLEKEY to decrypt the files',		metavar='TITLEKEY')
-	parser.add_option('--original',	dest='original',	help='merge extracted content with original DIR',		metavar='DIR')
-	(options, args) = parser.parse_args()
+	parser.add_argument('-v',	'--version',	dest='version',			help='download VERSION or latest if not specified',	metavar='VERSION')
+	parser.add_argument('-q',	'--quiet',	dest='quiet',			help='quiet output',					action='store_true',		default=False)
+	parser.add_argument('-b',	'--basedir',	dest='basedir',			help='use DIR as base directory',			metavar='DIR')
+	parser.add_argument('-d',	'--download',	dest='download',		help='download all files at once',			action='store_true',		default=False)
+	parser.add_argument('-e',	'--extract',	dest='extract',			help='extract content files',				action='store_true',		default=False)
+	parser.add_argument('-l',	'--list',	dest='list_content',		help='list content files',				action='store_true',		default=False)
+	parser.add_argument('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',			action='store_true',		default=False)
+	parser.add_argument('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',		action='store_true',		default=False)
+	parser.add_argument('-w',	'--wup',	dest='wup',			help='pack for WUP installer',				action='store_true',		default=False)
+	parser.add_argument('-t',	'--tagaya',	dest='tagaya',			help='update title DB from tagaya',			action='store_true',		default=False)
+	parser.add_argument(		'--titlekeys',	dest='titlekeys',		help='update titlekeys DB from G docs',			action='store_true',		default=False)
+	parser.add_argument(		'--ckey',	dest='common_key',		help='use HEXKEY as common key',			metavar='HEXKEY')
+	parser.add_argument(		'--dkey',	dest='dec_title_key',		help='use decrypted HEXKEY to decrypt the files',	metavar='HEXKEY')
+	parser.add_argument(		'--ekey',	dest='enc_title_key',		help='use encrypted HEXKEY to decrypt the files',	metavar='HEXKEY')
+	parser.add_argument(		'--original',	dest='original',		help='merge extracted content with original DIR',	metavar='DIR')
+	parser.add_argument(		'titleid',	nargs=argparse.REMAINDER)
+	options = parser.parse_args()
+	#print(type(options), options)
 
 	filedir = options.basedir
 	if not filedir:
@@ -985,11 +986,11 @@ Download and package UPDATEID ready for WUP installer:
 	if options.titlekeys:
 		update_db_titlekeys()
 
-	if not args:
+	if not len(options.titleid):
 		if not options.tagaya and not options.titlekeys:
 			parser.print_help()
 
-	for titleid in args:
+	for titleid in options.titleid:
 		ver		= options.version
 		d_title_key	= None
 		tmd		= None
