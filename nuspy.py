@@ -12,6 +12,10 @@ import requests
 import sqlite3
 import time
 import urllib.request
+
+# My modules
+import	global_vars
+
 try:
 	#Completely borrowed the Cyrpto.Cipher idea from
 	#zecoxao from gbatemp.  His documentation of it really
@@ -47,27 +51,27 @@ ckey =[]			#Common Key
 tkey_iv = []		#Title Key IV
 dtkey = [] 			#Decrypted Title Key
 
-# Global class to hold our CLI options, so we don't have to pass them around
-options = None
+# Global class to hold our CLI global_vars.options, so we don't have to pass them around
+global_vars.options = None
 		
 
 def downloadTMD(titledir, titleid, ver):
 	cache_dir = os.path.join(titledir, 'cache')
 	
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Downloading TMD for:",titleid)
 
 	try:
 		if ver == None:
 			# No version specified
-			if options.tagaya:
+			if global_vars.options.tagaya:
 				# Get the version from our DB
 				conn = sqlite3.connect('tagaya.db')
 				csr = conn.cursor()
 				csr.execute('''SELECT IFNULL(MAX(title_version), 0) FROM title_info WHERE title_id = ?''', [titleid])
 				data = csr.fetchone()[0]
 				conn.close()
-				if not options.quiet:
+				if global_vars.options.verbose:
 					print("No Version Selected, Found:", data)
 				ver = "%d" % data
 			else:
@@ -75,7 +79,7 @@ def downloadTMD(titledir, titleid, ver):
 				# Note that this may not be the most recent
 				url = nus + titleid + r'/tmd'
 				file = os.path.join(cache_dir, 'tmd')
-				if not options.quiet:
+				if global_vars.options.verbose:
 					print("Downloading: %s" % url)
 				# See if we can open the URL before creating the directory
 				conn = urllib.request.urlopen(url)
@@ -90,7 +94,7 @@ def downloadTMD(titledir, titleid, ver):
 
 					data = open(file, 'rb').read()
 					tmdver = str((data[0x1DC] << 8) + data[0x1DD])						#TMD ver is at offset 0x1DC and is two bytes in length.  So we pack them together
-					if not options.quiet:
+					if global_vars.options.verbose:
 						print("No Version Selected, Found:",tmdver)
 					ver = tmdver
 
@@ -98,10 +102,10 @@ def downloadTMD(titledir, titleid, ver):
 			url = nus + titleid + r'/tmd.'+ver
 			file = os.path.join(cache_dir, 'tmd.' + ver)
 			if os.path.isfile(file):
-				if not options.quiet:
+				if global_vars.options.verbose:
 					print("Cached: %s" % file)
 			else:
-				if not options.quiet:
+				if global_vars.options.verbose:
 					print("Downloading: %s" % url)
 				# See if we can open the URL before creating the directory
 				conn = urllib.request.urlopen(url)
@@ -117,8 +121,7 @@ def downloadTMD(titledir, titleid, ver):
 		return ver
 
 	except Exception as e:
-		if not options.quiet:
-			print("Exception:",e)
+		print("Exception:",e)
 		exit(1)
 
 def downloadCETK(titledir, titleid):
@@ -130,7 +133,7 @@ def downloadCETK(titledir, titleid):
 		url = nus + titleid + r'/cetk'
 		file = os.path.join(cache_dir, 'cetk')
 		if os.path.isfile(file):
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Cached: %s" % file)
 		else:
 			print("Downloading: %s" % url)
@@ -160,7 +163,7 @@ def	parseTMD(titledir, ver):
 	tmd.loadFile(tmd_path)
 	print("Parsing TMD for: %s" % tmd.title_id_hex)
 	print("Title version", tmd.tmd_title_version)
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Titles found:")
 		for title in tmd.tmd_contents:
 			print("ID:", title.id, "Index:", title.index, "Type:", title.type, "Size:", title.size)
@@ -206,7 +209,7 @@ def	humanrate(rate):
 #
 def	downloadFileProgress(url, filename, expected_size):
 	if (expected_size and os.path.isfile(filename) and os.path.getsize(filename) >= expected_size):
-		if not options.quiet:
+		if global_vars.options.verbose:
 			print("Cached:    ", url)
 		return
 	if expected_size:
@@ -285,10 +288,10 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 
 	if not content.type & 0x02:
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size):
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Cached:     %s.plain" % filename)
 		else:
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Decrypting: %s" % filename)
 
 			iv_key = list(map(ord, '\x00'*16))
@@ -321,7 +324,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 			open(filename + ".plain", "wb").write(decrypted_data)
 	else:
 		if (os.path.isfile(filename + '.plain') and os.path.getsize(filename + '.plain') >= content.size * 0xFC00 // 0x10000):
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Cached:     %s.plain" % filename)
 		else:
 			prefix = "\rDecrypting: %s" % filename
@@ -355,7 +358,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 			block_count = content.size // 0x10000
 			block_index = 0
 			while True:
-				if not options.quiet:
+				if global_vars.options.verbose:
 					block_percent = block_index * 100 // block_count
 					sys.stdout.write("%s %2d%%" % (prefix, block_percent))
 					sys.stdout.flush()
@@ -447,7 +450,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 			dec_file.close()
 			enc_file.close()
 
-			if not options.quiet:
+			if global_vars.options.verbose:
 				sys.stdout.write("%s done\n" % prefix)
 				sys.stdout.flush()
 
@@ -523,8 +526,8 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
-	if not options.extract_meta_file and not options.extract_meta_dir:
-		if not options.quiet:
+	if not global_vars.options.extract_meta_file and not global_vars.options.extract_meta_dir:
+		if global_vars.options.verbose:
 			print("Creating:  ", output_dir)
 		if not os.path.isdir(output_dir):
 			os.makedirs(output_dir)
@@ -553,26 +556,26 @@ def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	fe = fst.fe_entries[fstindex]
 	output_file = os.path.join(output_dir, fe.fn)
 
-	if not options.original:
-		if options.list_content:
+	if not global_vars.options.original:
+		if global_vars.options.list_content:
 			print("Copying:   ", os.path.join(currentdir, fe.fn))
 			return
 		return
 
-	original_dir = os.path.join(options.original, currentdir)
+	original_dir = os.path.join(global_vars.options.original, currentdir)
 	original_file = os.path.join(original_dir, fe.fn)
 
-	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
+	if (global_vars.options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
 		return
 
-	if (options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
+	if (global_vars.options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
 		return
 
-	if options.list_content:
+	if global_vars.options.list_content:
 		print("Copying:   ", original_file)
 		return
 
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Copying:   ", original_file)
 
 	if not os.path.isfile(original_file):
@@ -594,19 +597,19 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
-	if (options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
+	if (global_vars.options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
 		return
 
-	if (options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
+	if (global_vars.options.extract_meta_dir and not (currentdir == 'meta') and not (currentdir == 'code' and (fe.fn == 'app.xml' or fe.fn == 'cos.xml'))):
 		return
 
 	filename = os.path.join(output_dir, fe.fn)
 
-	if options.list_content:
+	if global_vars.options.list_content:
 		print("Extracting: %s (%d)" % (filename, fe.f_len))
 		return
 
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Extracting:", filename)
 
 	# Find the correct content file
@@ -726,16 +729,16 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	print("Packaging files for WUP installer into %s" % packagedir)
 
 	# Copy our tmd, cetk files
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Copying: title.tmd")
 	shutil.copy2(os.path.join(cache_dir, 'tmd.' + ver), os.path.join(packagedir, 'title.tmd'))
 
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Copying: title.tik")
 	shutil.copy2(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
 
 	# Copy the certs from the tmd, cetk files
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Creating: title.cert")
 	packer = pytmd.buffer_packer()
 
@@ -760,12 +763,12 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 
 		filename = content.id
 
-		if not options.quiet:
+		if global_vars.options.verbose:
 			print("Copying: %s" % filename)
 		shutil.copy2(os.path.join(cache_dir, filename),       os.path.join(packagedir, filename + '.app'))
 		# If the content has a .h3, copy that too
 		if (content.type & 0x02):
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Copying: %s" % filename + '.h3')
 			shutil.copy2(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
@@ -821,7 +824,7 @@ def	update_db_tagaya():
 		fi
 		'''
 
-		if not options.quiet:
+		if global_vars.options.verbose:
 			print("Fetching %s" % url)
 		html = requests.get(url, verify='nintendo_cert_bundle.pem')
 		if html:
@@ -833,7 +836,7 @@ def	update_db_tagaya():
 		csr = conn.cursor()
 		csr.execute('''SELECT IFNULL(MAX(list_version), 1) FROM list_info''')
 		highest_v = int(csr.fetchone()[0])
-		if not options.quiet:
+		if global_vars.options.verbose:
 			print("Current list version: %d" % current_v)
 			print("Highest list version in DB: %d" % highest_v)
 
@@ -847,7 +850,7 @@ def	update_db_tagaya():
 				url	= "https://%s/tagaya/versionlist/EUR/EU/list/%s.versionlist" % (fqdn, list_v)
 
 			#print(r, url)
-			if not options.quiet:
+			if global_vars.options.verbose:
 				print("Fetching %s" % url)
 			requests.packages.urllib3.disable_warnings()
 			html = requests.get(url, verify=False)
@@ -904,7 +907,7 @@ def	update_db_titlekeys():
 
 
 	url = "https://docs.google.com/spreadsheets/d/1l427nnapxKEUBA-aAtiwAq1Kw6lgRV-hqdocpKY6vQ0/export?format=csv"
-	if not options.quiet:
+	if global_vars.options.verbose:
 		print("Fetching %s" % url)
 	html = requests.get(url)
 	if html:
@@ -939,9 +942,6 @@ def	get_ekey_from_titlekeys(titleid):
 		return data[0]
 
 def main():
-	# Make our CLI options global so we don't have to pass them around.
-	global options
-
 	parser = argparse.ArgumentParser(
 		prog='nuspy.py',
 		formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -957,8 +957,8 @@ Download and package UPDATEID ready for WUP installer:
 %(prog)s -w UPDATEID
 
 """)
-	parser.add_argument('-v',	'--version',	dest='version',			help='download VERSION or latest if not specified',	metavar='VERSION')
-	parser.add_argument('-q',	'--quiet',	dest='quiet',			help='quiet output',					action='store_true',		default=False)
+	parser.add_argument('-v',	'--verbose',	dest='verbose',			help='verbose output',					action='count',			default=0)
+	parser.add_argument('-V',	'--version',	dest='version',			help='download VERSION or latest if not specified',	metavar='VERSION')
 	parser.add_argument('-b',	'--basedir',	dest='basedir',			help='use DIR as base directory',			metavar='DIR')
 	parser.add_argument('-d',	'--download',	dest='download',		help='download all files at once',			action='store_true',		default=False)
 	parser.add_argument('-e',	'--extract',	dest='extract',			help='extract content files',				action='store_true',		default=False)
@@ -973,25 +973,25 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_argument(		'--ekey',	dest='enc_title_key',		help='use encrypted HEXKEY to decrypt the files',	metavar='HEXKEY')
 	parser.add_argument(		'--original',	dest='original',		help='merge extracted content with original DIR',	metavar='DIR')
 	parser.add_argument(		'titleid',	nargs=argparse.REMAINDER)
-	options = parser.parse_args()
-	#print(type(options), options)
+	global_vars.options = parser.parse_args()
+	#print(type(global_vars.options), global_vars.options)
 
-	filedir = options.basedir
+	filedir = global_vars.options.basedir
 	if not filedir:
 		filedir = os.getcwd()
 
-	if options.tagaya:
+	if global_vars.options.tagaya:
 		update_db_tagaya()
 
-	if options.titlekeys:
+	if global_vars.options.titlekeys:
 		update_db_titlekeys()
 
-	if not len(options.titleid):
-		if not options.tagaya and not options.titlekeys:
+	if not len(global_vars.options.titleid):
+		if not global_vars.options.tagaya and not global_vars.options.titlekeys:
 			parser.print_help()
 
-	for titleid in options.titleid:
-		ver		= options.version
+	for titleid in global_vars.options.titleid:
+		ver		= global_vars.options.version
 		d_title_key	= None
 		tmd		= None
 		cetk		= None
@@ -1006,23 +1006,23 @@ Download and package UPDATEID ready for WUP installer:
 		ver = downloadTMD(titledir, titleid, ver)			# Download the tmd and cetk files
 		tmd = parseTMD(titledir, ver)
 
-		if options.common_key:
-			ckey_hex = options.common_key
+		if global_vars.options.common_key:
+			ckey_hex = global_vars.options.common_key
 		else:
 			ckey_hex = b'D7B00402659BA2ABD2CB0DB27FA2B656'
-		if not options.quiet:
+		if global_vars.options.verbose:
 			print("Using common key: %s" % ckey_hex)
 		ckey = binascii.unhexlify(ckey_hex)
 
-		if options.dec_title_key:
-			print("Using decrypted title key: %s" % options.dec_title_key)
-			d_title_key = binascii.unhexlify(options.dec_title_key)
+		if global_vars.options.dec_title_key:
+			print("Using decrypted title key: %s" % global_vars.options.dec_title_key)
+			d_title_key = binascii.unhexlify(global_vars.options.dec_title_key)
 
-		elif options.enc_title_key:
-			print("Using encrypted title key: %s" % options.enc_title_key)
+		elif global_vars.options.enc_title_key:
+			print("Using encrypted title key: %s" % global_vars.options.enc_title_key)
 			# Decrypt the encrypted title key using the common key and the title ID
 			title_iv = tmd.title_id + b'\x00' * 8
-			keys = ( binascii.unhexlify(options.enc_title_key), ckey, title_iv)
+			keys = ( binascii.unhexlify(global_vars.options.enc_title_key), ckey, title_iv)
 			d_title_key = decryptTitleKey(keys)
 		else:
 			# Check our titlekeys DB
@@ -1048,16 +1048,16 @@ Download and package UPDATEID ready for WUP installer:
 
 		print("Decrypted Title Key:", binascii.hexlify(d_title_key))
 
-		if (options.download):
+		if (global_vars.options.download):
 			downloadTitles(titledir, tmd)
 
-		if (options.wup):
+		if (global_vars.options.wup):
 			if not cetk:
 				print("Error: Packaging for WUP requires the cetk file")
 				exit(1)
 			packageForWUP(titledir, ver, tmd, cetk, keys)
 
-		if (options.extract or options.extract_meta_file or options.extract_meta_dir or options.list_content):
+		if (global_vars.options.extract or global_vars.options.extract_meta_file or global_vars.options.extract_meta_dir or global_vars.options.list_content):
 
 			fst = loadContent(titledir, ver, tmd, ckey, d_title_key)
 

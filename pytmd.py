@@ -4,12 +4,14 @@ import binascii
 import	collections
 import hashlib
 
+# My modules
+import	global_vars
+
 WiiUCommenDevKey = b'\x2F\x5C\x1B\x29\x44\xE7\xFD\x6F\xC3\x97\x96\x4B\x05\x76\x91\xFA'
 wiiu_common_key = b'\xD7\xB0\x04\x02\x65\x9B\xA2\xAB\xD2\xCB\x0D\xB2\x7F\xA2\xB6\x56'
 
-
-DEBUG_UNPACKING	= False
-#DEBUG_UNPACKING	= True
+# Set the -vvv level to output debugging info
+DEBUG_LEVEL	= 3
 
 def	get_signature_type(key, value):
 	# Taken from http://www.3dbrew.org/wiki/Title_metadata
@@ -54,7 +56,7 @@ class	buffer_unpacker():
 		self._offset = 0
 
 	def __call__(self, fmt):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			r = min(16, (self.length() - self.tell()))
 			if r > 0:
 				print("%d 0x%X" % (self._offset, self._offset), fmt, self._buffer[self._offset : self._offset + r])
@@ -101,7 +103,7 @@ class	SIGNATURE():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -145,7 +147,7 @@ class TMD_CONTENT():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -173,7 +175,7 @@ class	TMD_CERT():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -211,7 +213,7 @@ class	CETK():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -299,7 +301,7 @@ class TMD_PARSER():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -399,7 +401,7 @@ class FST_CONTENT():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -430,7 +432,7 @@ class FE_ENTRY():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -467,7 +469,7 @@ class FST_PARSER():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
@@ -535,7 +537,7 @@ class	ANCAST_HEADER():
 		return self._data.get(name, None)
 
 	def __setattr__(self, name, value):
-		if DEBUG_UNPACKING:
+		if global_vars.options.verbose >= DEBUG_LEVEL:
 			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
