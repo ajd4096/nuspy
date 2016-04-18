@@ -1,11 +1,15 @@
 
 import struct, functools, ctypes
 import binascii
+import	collections
 import hashlib
 
 WiiUCommenDevKey = b'\x2F\x5C\x1B\x29\x44\xE7\xFD\x6F\xC3\x97\x96\x4B\x05\x76\x91\xFA'
 wiiu_common_key = b'\xD7\xB0\x04\x02\x65\x9B\xA2\xAB\xD2\xCB\x0D\xB2\x7F\xA2\xB6\x56'
 
+
+DEBUG_UNPACKING	= False
+#DEBUG_UNPACKING	= True
 
 def	get_signature_type(key, value):
 	# Taken from http://www.3dbrew.org/wiki/Title_metadata
@@ -22,7 +26,16 @@ def	get_signature_type(key, value):
 	for t in signature_types:
 		if t[key] == value:
 			return t
-	print(key, value)
+	if (key == 'name'):
+		print("%s %s" % (key, value))
+	elif (key == 'value'):
+		print("%s %d 0x%X" % (key, value, value))
+	elif (key == 'size'):
+		print("%s %d 0x%X" % (key, value, value))
+	elif (key == 'padding'):
+		print("%s %d 0x%X" % (key, value, value))
+	else:
+		print(key, value)
 	assert False, "Unrecognised signature type"
 
 class	buffer_packer():
@@ -41,6 +54,10 @@ class	buffer_unpacker():
 		self._offset = 0
 
 	def __call__(self, fmt):
+		if DEBUG_UNPACKING:
+			r = min(16, (self.length() - self.tell()))
+			if r > 0:
+				print("%d 0x%X" % (self._offset, self._offset), fmt, self._buffer[self._offset : self._offset + r])
 		result = struct.unpack_from(fmt, self._buffer, self._offset)
 		self._offset += struct.calcsize(fmt)
 		return result
@@ -49,6 +66,22 @@ class	buffer_unpacker():
 		if self._offset >= len(self._buffer):
 			return True
 		return False
+
+	def	length(self):
+		return len(self._buffer)
+
+        # Get the next output without moving the offset
+	def	peek(self, fmt):
+		off = self.tell()
+		out = self(fmt)
+		self.seek(off)
+		return out
+
+	def	peek16(self):
+		r = min(16, (self.length() - self.tell()))
+		if r > 0:
+			return self.peek('<%dB' % r)
+		return "EOF"
 
 	def	seek(self, offset):
 		if offset >= 0 and offset < len(self._buffer):
@@ -90,8 +123,14 @@ class	SIGNATURE():
 		packer('>%ds' % self.get_padding(), self.padding)
 
 	def	unpack(self, unpacker):
+		if DEBUG_UNPACKING:
+			print("type:")
 		self.sig_type		= unpacker('>I')[0]
+		if DEBUG_UNPACKING:
+			print("sig:")
 		self.signature		= unpacker('>%ds' % self.get_length())[0]
+		if DEBUG_UNPACKING:
+			print("padding:")
 		self.padding		= unpacker('>%ds' % self.get_padding())[0]
 
 class TMD_CONTENT():
@@ -207,33 +246,89 @@ class	CETK():
 		return o
 
 	def	loadFile(self, filename):
+		#print(type(filename), filename)
 		unpacker = buffer_unpacker(open(filename, 'rb').read())
 		self.unpack(unpacker)
 
 	def	unpack(self, unpacker):
+		print("len %d" % len(unpacker._buffer))
+		if DEBUG_UNPACKING:
+			print("sig:")
 		self.signature.unpack(unpacker)
+		if DEBUG_UNPACKING:
+			print("issuer:")
 		self.issuer			= unpacker('>64s')[0].rstrip(b'\x00')
+		if DEBUG_UNPACKING:
+			print("public key:")
 		self.public_key			= unpacker('>60s')[0]
+		if DEBUG_UNPACKING:
+			print("version:")
 		self.version			= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("ca_crl_version:")
 		self.ca_crl_version		= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("signer_crl_version:")
 		self.signer_crl_version		= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("title_key:")
 		self.title_key			= unpacker('>16s')[0]
+		if DEBUG_UNPACKING:
+			print("reserved1:")
 		self.reserved1			= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("ticket_id:")
 		self.ticket_id			= unpacker('>Q')[0]
+		if DEBUG_UNPACKING:
+			print("console_id:")
 		self.console_id			= unpacker('>I')[0]
+		if DEBUG_UNPACKING:
+			print("title_id:")
 		self.title_id			= unpacker('>Q')[0]
+		if DEBUG_UNPACKING:
+			print("reserved2:")
 		self.reserved2			= unpacker('>H')[0]
+		if DEBUG_UNPACKING:
+			print("ticket_title_version:")
 		self.ticket_title_version	= unpacker('>H')[0]
+		if DEBUG_UNPACKING:
+			print("reserved_3:")
 		self.reserved3			= unpacker('8s')[0]
+		if DEBUG_UNPACKING:
+			print("license_type:")
 		self.license_type		= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("ckey_index:")
 		self.ckey_index			= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("reserved4:")
 		self.reserved4			= unpacker('42s')[0]
+		if DEBUG_UNPACKING:
+			print("account_id:")
 		self.account_id			= unpacker('>I')[0]
+		if DEBUG_UNPACKING:
+			print("reserved5:")
 		self.reserved5			= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("audit:")
 		self.audit			= unpacker('B')[0]
+		if DEBUG_UNPACKING:
+			print("reserved6:")
 		self.reserved6			= unpacker('66s')[0]
+		if DEBUG_UNPACKING:
+			print("limits:")
 		self.limits			= unpacker('64s')[0]
-		self.content_index		= unpacker('172s')[0]
+		if DEBUG_UNPACKING:
+			print("content_index:")
+		self.content_index		= unpacker('H')[0]
+		if DEBUG_UNPACKING:
+			print("reserved7:")
+		self.reserved7			= unpacker('5s')[0]
+		if DEBUG_UNPACKING:
+			print("cert_offset:")
+		self.cert_offset		= unpacker('B')[0]
+		# More stuff in here, seems to be some sort of very long bit mask
+		unpacker.seek(0x2A4 + self.cert_offset)
 		self.certificates = []
 		while not unpacker.iseof():
 			cert = TMD_CERT()
@@ -470,3 +565,54 @@ class FST_PARSER(FST_CONTENT, FE_ENTRY):
 					break
 			else:
 				e.fn = name_table[e.name_offset: end].decode('latin-1')
+
+class	ANCAST_HEADER(collections.OrderedDict):
+	def	__init__(self):
+		self = {}
+	def	unpack(self, unpacker):
+		self['magic']	= unpacker('>I')[0]
+		if self['magic'] != 0xEFA282D9:
+			return None
+		self['null1']			= unpacker('>I')[0]
+		self['signature_offset']	= unpacker('>I')[0]
+		self['null2']			= unpacker('>I')[0]
+		self['null3']			= unpacker('%ds' % 0x10)[0]
+		unpacker.seek(self['signature_offset'])
+		self['signature_type']		= unpacker('>I')[0]
+		if self['signature_type'] == 1:
+			# PPC ancast
+			self['signature']	= unpacker('%ds' % 0x38)[0]
+			self['padding1']	= unpacker('%ds' % 0x44)[0]
+		elif self['signature_type'] == 2:
+			# ARM
+			self['signature']	= unpacker('%ds' % 0x100)[0]
+			self['padding1']	= unpacker('%ds' % 0x7C)[0]
+		else:
+			print("Unknown signature type 0x%X" % self['signature_type'])
+		self['null4']		= unpacker('>H')[0]
+		self['null4']		= unpacker('>B')[0]
+		self['null4']		= unpacker('>B')[0]
+		self['unknown']		=  unpacker('>I')[0]
+		self['hash_type']	=  unpacker('>I')[0]
+		self['body_size']	=  unpacker('>I')[0]
+		self['body_hash']	=  unpacker('%ds' % 0x14)[0]
+		if self['signature_type'] == 1:
+			self['padding5']	= unpacker('%ds' % 0x3C)[0]
+		elif self['signature_type'] == 2:
+			self['version']		= unpacker('>I')[0]
+			self['padding5']	= unpacker('%ds' % 0x38)[0]
+		self['body']		=  unpacker('%ds' % self['body_size'])[0]
+		# Fill in the keys
+		if self['signature_type'] == 1:
+			if self['unknown'] == 0x11:
+				# WiiU
+				self['key'] = b'805E6285CD487DE0FAFFAA65A6985E17'
+				self['iv']  = b'596D5A9AD705F94FE158026FEAA7B887'
+			elif self['unknown'] == 0x13:
+				# vWii
+				self['key'] = b'2EFE8ABCEDBB7BAAE3C0ED92FA29F866'
+				self['iv']  = b'596D5A9AD705F94FE158026FEAA7B887'
+		elif self['signature_type'] == 2:
+			# ARM
+			self['key'] = b'B5D8AB06ED7F6CFC529F2CE1B4EA32FD'
+			self['iv']  = b'91C9D008312851EF6B228BF14BAD4322'

@@ -487,7 +487,7 @@ def decryptTitleKey(keys):
 
 	return dtkey
 	
-def	loadContent(titledir, tmd, ckey, dkey):
+def	loadContent(titledir, ver, tmd, ckey, dkey):
 	cache_dir = os.path.join(titledir, 'cache')
 
 	decryptContentFile(titledir, tmd, ckey, dkey, tmd.tmd_contents[0])
@@ -502,11 +502,23 @@ def	loadContent(titledir, tmd, ckey, dkey):
 
 	unpacker = pytmd.buffer_unpacker(data)
 
-	fst = pytmd.FST_PARSER()
-	fst.unpack(unpacker)
-	#print(fst)
-	
-	return fst
+	magic = unpacker.peek('>I')[0]
+
+	# b'FST\0'
+	if magic == 0x46535400:
+		print("Reading Contents:")
+		fst = pytmd.FST_PARSER()
+		fst.unpack(unpacker)
+		print("Found " + str((len(fst.fe_entries))) + " files")
+		extractFiles(titledir, ver, fst, tmd, ckey, dkey)
+
+	elif magic == 0xEFA282D9:
+		print("Ancast image")
+		hdr = pytmd.ANCAST_HEADER()
+		hdr.unpack(unpacker)
+		#print(type(hdr), hdr)
+		extractAncastImage(titledir, ver, tmd, hdr)
+		return None
 
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -659,7 +671,36 @@ def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
 	print("Extracting files into %s" % output_dir)
 
 	# Start with the root dir at index 0
+	if len(fst.fe_entries) == 0:
+		print(type(fst), fst)
 	extractFstDirectory(titledir, fst, tmd, ckey, dkey, '', 0)
+
+def	extractAncastImage(titledir, ver, tmd, header):
+	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version)
+
+	# Start with a clean dir
+	if (os.path.exists(output_dir)):
+		shutil.rmtree(output_dir)
+	if not os.path.isdir(output_dir):
+		os.makedirs(output_dir)
+
+	print("Extracting files into %s" % output_dir)
+
+	# Build our filename
+	filename = os.path.join(output_dir, "image")
+	if header['signature_type'] == 1:
+		filename += '.ppc'
+	elif header['signature_type'] == 2:
+		filename += '.arm'
+
+	# Decrypt the data
+	decrypted_data = decryptData((header['body'], binascii.unhexlify(header['key']), binascii.unhexlify(header['iv']))).encode('latin-1')
+
+	# Write out the single image file.
+	output_file = open(filename, 'wb')
+	output_file.write(decrypted_data)
+	output_file.close()
+
 
 def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	cache_dir = os.path.join(titledir, 'cache')
@@ -1005,11 +1046,7 @@ Download and package UPDATEID ready for WUP installer:
 
 		if (options.extract or options.extract_meta_file or options.extract_meta_dir or options.list_content):
 
-			print("Reading Contents:")
-			fst = loadContent(titledir, tmd, ckey, d_title_key)
-			print("Found " + str((len(fst.fe_entries))) + " files")
-
-			extractFiles(titledir, ver, fst, tmd, ckey, d_title_key)
+			fst = loadContent(titledir, ver, tmd, ckey, d_title_key)
 
 
 if __name__ == "__main__":
