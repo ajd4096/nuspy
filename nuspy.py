@@ -684,6 +684,16 @@ def	extractAncastImage(titledir, ver, tmd, header):
 
 	print("Extracting files into %s" % output_dir)
 
+	# Check the hash
+	if header.hash_type == 2:
+		found = hashlib.sha1(header.body).digest()
+		expected = header.body_hash
+		if (found != expected):
+			print("Hash mismatch")
+			print("Expected %s" % binascii.hexlify(expected))
+			print("Found    %s" % binascii.hexlify(found))
+			exit(1)
+
 	# Build our filename
 	filename = os.path.join(output_dir, "image")
 	if header.signature_type == 1:
