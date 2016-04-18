@@ -15,6 +15,7 @@ import urllib.request
 
 # My modules
 import	global_vars
+import	wiiubrew
 
 try:
 	#Completely borrowed the Cyrpto.Cipher idea from
@@ -968,6 +969,7 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_argument('-w',	'--wup',	dest='wup',			help='pack for WUP installer',				action='store_true',		default=False)
 	parser.add_argument('-t',	'--tagaya',	dest='tagaya',			help='update title DB from tagaya',			action='store_true',		default=False)
 	parser.add_argument(		'--titlekeys',	dest='titlekeys',		help='update titlekeys DB from G docs',			action='store_true',		default=False)
+	parser.add_argument(		'--wiiubrew',	dest='wiiubrew',		help='update wiiubrew DB',				action='store_true',		default=False)
 	parser.add_argument(		'--ckey',	dest='common_key',		help='use HEXKEY as common key',			metavar='HEXKEY')
 	parser.add_argument(		'--dkey',	dest='dec_title_key',		help='use decrypted HEXKEY to decrypt the files',	metavar='HEXKEY')
 	parser.add_argument(		'--ekey',	dest='enc_title_key',		help='use encrypted HEXKEY to decrypt the files',	metavar='HEXKEY')
@@ -986,8 +988,11 @@ Download and package UPDATEID ready for WUP installer:
 	if global_vars.options.titlekeys:
 		update_db_titlekeys()
 
+	if global_vars.options.wiiubrew:
+		wiiubrew.update_db_wiiubrew()
+
 	if not len(global_vars.options.titleid):
-		if not global_vars.options.tagaya and not global_vars.options.titlekeys:
+		if not global_vars.options.tagaya and not global_vars.options.titlekeys and not global_vars.options.wiiubrew:
 			parser.print_help()
 
 	for titleid in global_vars.options.titleid:

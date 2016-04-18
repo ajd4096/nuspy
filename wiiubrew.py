@@ -5,6 +5,9 @@ import	re
 import	requests
 import	sqlite3
 
+# My modules
+import	global_vars
+
 def	update_db_wiiubrew():
 	#conn = sqlite3.connect(':memory:')
 	conn = sqlite3.connect('wiiubrew.db')
@@ -55,7 +58,7 @@ def	update_db_wiiubrew():
 
 	header = {'User-Agent': 'Mozilla/5.0'} #Needed to prevent 403 error on Wikipedia
 	url = "http://wiiubrew.org/wiki/Title_database"
-	if not args.quiet:
+	if global_vars.options.verbose:
 		print("Fetching %s" % url)
 	html = requests.get(url)
 	soup = bs4.BeautifulSoup(html.text, 'html.parser')
@@ -269,38 +272,30 @@ def	refresh_update_versions():
 	conn.close()
 
 def	main():
-	# Make our CLI options global so we don't have to pass them around.
-	global args
-
-	# The "new, improved" argparse is fucked.
-	# It does everything well, except parse arguments.
-	# Options, it does ok. Arguments? Not. At. All.
-	# And it is not even close to being compatible with optparse
-
 	parser = argparse.ArgumentParser(description='wiiubrew DB tool')
-	parser.add_argument('-q',	'--quiet',	dest='quiet',		help='quiet output',				action='store_true',		default=False)
+	parser.add_argument('-v',	'--verbose',	dest='verbose',		help='verbose output',				action='count',			default=0)
 	parser.add_argument('-f',	'--fetch',	dest='fetch',		help='Fetch current tables from wiiubrew',	action='store_true',		default=False)
 	parser.add_argument('-r',	'--refresh',	dest='refresh',		help='Refresh "updates" versions from tagaya',	action='store_true',		default=False)
 	parser.add_argument('-t',	'--titles',	dest='titles',		help='Print "titles" table',			action='store_true',		default=False)
 	parser.add_argument('-u',	'--updates',	dest='updates',		help='Print "updates" table',			action='store_true',		default=False)
 	parser.add_argument('-d',	'--dlc',	dest='dlc',		help='Print "dlc" table',			action='store_true',		default=False)
 
-	args = parser.parse_args()
-	#print(type(vars(args)), vars(args))
+	global_vars.options = parser.parse_args()
+	#print(type(vars(global_vars.options)), vars(global_vars.options))
 
-	if args.fetch:
+	if global_vars.options.fetch:
 		update_db_wiiubrew()
 
-	if args.refresh:
+	if global_vars.options.refresh:
 		refresh_update_versions()
 
-	if args.titles:
+	if global_vars.options.titles:
 		print_titles()
 
-	if args.updates:
+	if global_vars.options.updates:
 		print_updates()
 
-	if args.dlc:
+	if global_vars.options.dlc:
 		print_dlc()
 
 
