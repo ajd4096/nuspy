@@ -135,9 +135,15 @@ def downloadCETK(titledir, titleid):
 		else:
 			print("Downloading: %s" % url)
 			# See if we can open the URL before creating the directory
-			if urllib.request.urlopen(url):
+			conn = urllib.request.urlopen(url)
+			if conn:
 				os.makedirs(cache_dir, exist_ok = True)
-			urllib.request.urlretrieve(url, file)
+				urllib.request.urlretrieve(url, file)
+				# Set the file's timestamp to the URL's Last-Modified
+				last_modified = conn.headers['Last-Modified']
+				if last_modified:
+					t = time.mktime(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
+					os.utime(file, (t,t))
 
 	except Exception as e:
 		print("Exception:",e)
