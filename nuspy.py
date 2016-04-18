@@ -156,8 +156,8 @@ def	parseTMD(titledir, ver):
 		print("TMD File Not Found!")
 		exit(1)
 
-	tmd = pytmd.TMD_PARSER(tmd_path)
-	tmd.ReadContent()
+	tmd = pytmd.TMD_PARSER()
+	tmd.loadFile(tmd_path)
 	print("Parsing TMD for: %s" % tmd.title_id_hex)
 	print("Title version", tmd.tmd_title_version)
 	if not options.quiet:

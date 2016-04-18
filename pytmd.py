@@ -102,7 +102,7 @@ class	SIGNATURE():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -146,7 +146,7 @@ class TMD_CONTENT():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	pack(self, packer):
@@ -174,7 +174,7 @@ class	TMD_CERT():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -212,7 +212,7 @@ class	CETK():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -281,78 +281,64 @@ class	CETK():
 		self.cert_offset		= unpacker('B')[0]
 		# More stuff in here, seems to be some sort of very long bit mask
 		unpacker.seek(0x2A4 + self.cert_offset)
-		self.certificates = []
+		certificates = []
 		while not unpacker.iseof():
 			cert = TMD_CERT()
 			cert.unpack(unpacker)
-			self.certificates.append(cert)
+			certificates.append(cert)
+		self.certificates = certificates
 
 class TMD_PARSER():
 	""" Parses Wii U TMD """
-	def __init__(self, filepath=None):
-		#self.file = open(filepath, 'rb')
+	def	__init__(self):
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
 
-		# Read in the entire file, then set up our unpacker
-		self.data = open(filepath, 'rb').read()
-		self.unpacker = buffer_unpacker(self.data)
+	def __getattr__(self, name):
+		return self._data.get(name, None)
 
-		self.tmd_signature = SIGNATURE()
-		self.tmd_issuer = 	[]
-		self.tmd_version = 0
-		self.tmd_ca_crl_version = 0 
-		self.tmd_signer_crl_version = 0
-		self.tmd_padding2 = 0
-		self.tmd_system_version = 0
-		self.title_id = 0
-		self.title_id_hex = ''
-		self.tmd_title_type = 0
-		self.tmd_group_id = 0
-		self.tmd_public_save_size = 0
-		self.tmd_private_save_size = 0
-		self.tmd_reserved1 = []
-		self.tmd_srl_flag = 0
-		self.tmd_reserved2 = []
-		self.tmd_access_rights = 0
-		self.tmd_title_version = 0
-		self.tmd_number_of_contents = 0
-		self.tmd_boot_index = 0
-		self.tmd_padding3 = 0
-		self.tmd_hash_table_hash = []
-		self.tmd_content_info_records = []
-		self.tmd_contents = []
-		self.certificates = []
-		
-	def	ReadContent(self):
-		self.tmd_signature.unpack(self.unpacker)
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__class__.__name__, name, value))
+		self._data[name] = value
 
-		self.tmd_issuer			= self.unpacker('>64s')[0]
-		self.tmd_version		= self.unpacker('1c')[0]
-		self.tmd_ca_crl_version		= self.unpacker('1c')[0]
-		self.tmd_signer_crl_version	= self.unpacker('1c')[0]
-		self.tmd_padding2		= self.unpacker('1c')[0]
-		self.tmd_system_version		= '%016x' % self.unpacker('>Q')[0]
+	def	loadFile(self, filename):
+		#print(type(filename), filename)
+		unpacker = buffer_unpacker(open(filename, 'rb').read())
+		self.unpack(unpacker)
+
+	def	unpack(self, unpacker):
+		self.tmd_signature		= SIGNATURE().unpack(unpacker)
+
+		self.tmd_issuer			= unpacker('>64s')[0]
+		self.tmd_version		= unpacker('1c')[0]
+		self.tmd_ca_crl_version		= unpacker('1c')[0]
+		self.tmd_signer_crl_version	= unpacker('1c')[0]
+		self.tmd_padding2		= unpacker('1c')[0]
+		self.tmd_system_version		= '%016x' % unpacker('>Q')[0]
 		# The title ID is an 8-byte hex number, but it is an ID, not an int
 		# (We will not be using it to add/subtract/ etc)
 		# Read it in as a string
-		self.title_id			= self.unpacker('>8s')[0]
+		self.title_id			= unpacker('>8s')[0]
 		self.title_id_hex		= binascii.hexlify(self.title_id).decode('latin-1').upper()
-		self.tmd_title_type		= self.unpacker('>I')[0]
-		self.tmd_group_id		= self.unpacker('>H')[0]
-		self.tmd_public_save_size	= self.unpacker('>I')[0]
-		self.tmd_private_save_size	= self.unpacker('>I')[0]
-		self.tmd_reserved1		= self.unpacker('>I')[0]
-		self.tmd_srl_flag		= self.unpacker('1c')[0]
-		self.tmd_reserved2		= self.unpacker('49s')[0]
-		self.tmd_access_rights		= '%08X' % self.unpacker('>I')[0]
-		self.tmd_title_version		= '%04X' % self.unpacker('>H')[0]
-		self.tmd_number_of_contents	= self.unpacker('>H')[0]
-		self.tmd_boot_index		= self.unpacker('>H')[0]
-		self.tmd_padding3		= self.unpacker('2s')[0]
-		self.tmd_hash_table_hash	= self.unpacker('>32s')[0]
+		self.tmd_title_type		= unpacker('>I')[0]
+		self.tmd_group_id		= unpacker('>H')[0]
+		self.tmd_public_save_size	= unpacker('>I')[0]
+		self.tmd_private_save_size	= unpacker('>I')[0]
+		self.tmd_reserved1		= unpacker('>I')[0]
+		self.tmd_srl_flag		= unpacker('1c')[0]
+		self.tmd_reserved2		= unpacker('49s')[0]
+		self.tmd_access_rights		= '%08X' % unpacker('>I')[0]
+		self.tmd_title_version		= '%04X' % unpacker('>H')[0]
+		self.tmd_number_of_contents	= unpacker('>H')[0]
+		self.tmd_boot_index		= unpacker('>H')[0]
+		self.tmd_padding3		= unpacker('2s')[0]
+		self.tmd_hash_table_hash	= unpacker('>32s')[0]
 
 		# Validate the CIR table hash
-		offset = self.unpacker.tell()
-		cir_table_hash = hashlib.sha256(self.data[offset : offset + 0x24 * 64]).digest()
+		offset = unpacker.tell()
+		cir_table_hash = hashlib.sha256(unpacker._buffer[offset : offset + 0x24 * 64]).digest()
 		if (self.tmd_hash_table_hash != cir_table_hash):
 			print("Hash mismatch for CIR table")
 			print("Expected: %s" % self.tmd_hash_table_hash)
@@ -362,19 +348,20 @@ class TMD_PARSER():
 			pass
 
 		# Read in all the content info records
-		self.tmd_content_info_records = []
+		tmd_content_info_records = []
 		for i in range(64):
-			(cir_offset, cir_count, cir_hash)	= self.unpacker('>HH32s')
-			self.tmd_content_info_records.append((cir_offset, cir_count, cir_hash))
+			(cir_offset, cir_count, cir_hash)	= unpacker('>HH32s')
+			tmd_content_info_records.append((cir_offset, cir_count, cir_hash))
+		self.tmd_content_info_records = tmd_content_info_records
 
 		# Validate the CIR entry hashes
 		# (Guessed starting offset, only ever seen the 1st CIR used to hash all the CCR)
-		offset = self.unpacker.tell()
+		offset = unpacker.tell()
 		for i in range(64):
 			(cir_offset, cir_count, cir_hash) = self.tmd_content_info_records[i]
 			if cir_count:
 				start = offset + cir_offset * 0x30
-				ccr_hash = hashlib.sha256(self.data[start : start + cir_count * 0x30]).digest()
+				ccr_hash = hashlib.sha256(unpacker._buffer[start : start + cir_count * 0x30]).digest()
 				if ccr_hash != cir_hash:
 					print("Hash mismatch for CIR entry %d" %  i)
 					print("Expected: %s" % cir_hash)
@@ -384,19 +371,21 @@ class TMD_PARSER():
 					pass
 
 		# Read in the content records
-		self.tmd_contents = []
+		tmd_contents = []
 		for content in range(0, self.tmd_number_of_contents):
 			tmd_cnt = TMD_CONTENT()
-			tmd_cnt.unpack(self.unpacker)
-			self.tmd_contents.append(tmd_cnt)
+			tmd_cnt.unpack(unpacker)
+			tmd_contents.append(tmd_cnt)
+		self.tmd_contents = tmd_contents
 
 		# Read in any certificates after
-		self.certificates = []
-		while not self.unpacker.iseof():
-			#print("Found cert at 0x%X" % self.unpacker.tell())
+		certificates = []
+		while not unpacker.iseof():
+			#print("Found cert at 0x%X" % unpacker.tell())
 			cert = TMD_CERT()
-			cert.unpack(self.unpacker)
-			self.certificates.append(cert)
+			cert.unpack(unpacker)
+			certificates.append(cert)
+		self.certificates = certificates
 
 
 
@@ -411,7 +400,7 @@ class FST_CONTENT():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -442,7 +431,7 @@ class FE_ENTRY():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -479,7 +468,7 @@ class FST_PARSER():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
@@ -507,21 +496,23 @@ class FST_PARSER():
 		self.unknown1	= unpacker('>I')[0]
 		self.ContentCount	= unpacker('>I')[0]
 		self.unknown2	= unpacker('>5I')
-		self.fst_contents = []
+		fst_contents = []
 		for i in range(self.ContentCount):
 			e = FST_CONTENT()
 			e.unpack(unpacker)
-			self.fst_contents.append(e)
+			fst_contents.append(e)
+		self.fst_contents = fst_contents
 		# Get our first entry so we know how many we have
-		self.fe_entries = []
+		fe_entries = []
 		root_entry = FE_ENTRY()
 		root_entry.unpack(unpacker)
-		self.fe_entries.append(root_entry)
+		fe_entries.append(root_entry)
 		# Parse the rest of our entries
 		for i in range(1, root_entry.f_len):
 			e = FE_ENTRY()
 			e.unpack(unpacker)
-			self.fe_entries.append(e)
+			fe_entries.append(e)
+		self.fe_entries = fe_entries
 		# Go back and fill in the names
 		name_table = unpacker._buffer[unpacker._offset:]
 		for e in self.fe_entries:
@@ -545,7 +536,7 @@ class	ANCAST_HEADER():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print("%s.%s=%s" % (__name__, name, value))
+			print("%s.%s=%s" % (__class__.__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
