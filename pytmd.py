@@ -93,9 +93,17 @@ class	buffer_unpacker():
 
 class	SIGNATURE():
 	def	__init__(self):
-		self.sig_type		= 0
-		self.sig		= []
-		self.padding1		= []
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ''
@@ -123,24 +131,24 @@ class	SIGNATURE():
 		packer('>%ds' % self.get_padding(), self.padding)
 
 	def	unpack(self, unpacker):
-		if DEBUG_UNPACKING:
-			print("type:")
 		self.sig_type		= unpacker('>I')[0]
-		if DEBUG_UNPACKING:
-			print("sig:")
 		self.signature		= unpacker('>%ds' % self.get_length())[0]
-		if DEBUG_UNPACKING:
-			print("padding:")
 		self.padding		= unpacker('>%ds' % self.get_padding())[0]
 
 class TMD_CONTENT():
-	def __init__(self):
-		self.id = 0
-		self.index = 0
-		self.type = 0
-		self.size = 0
-		self.sha1_hash = []
-	
+	def	__init__(self):
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
+
 	def	pack(self, packer):
 		packer('>I',	int.from_bytes(self.id, 16))
 		packer('>H',	self.index)
@@ -157,11 +165,17 @@ class TMD_CONTENT():
 
 class	TMD_CERT():
 	def	__init__(self):
-		self.signature		= SIGNATURE()
-		self.issuer		= ''
-		self.tag		= 0
-		self.name		= ''
-		self.key		= ''
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ''
@@ -181,7 +195,7 @@ class	TMD_CERT():
 		packer('>316s',		self.key)
 
 	def	unpack(self, unpacker):
-		self.signature.unpack(unpacker)
+		self.signature		= SIGNATURE().unpack(unpacker)
 		self.issuer		= unpacker('>64s')[0].rstrip(b'\x00')
 		self.tag		= unpacker('>I')[0]
 		self.name		= unpacker('>64s')[0].rstrip(b'\x00')
@@ -189,28 +203,17 @@ class	TMD_CERT():
 
 class	CETK():
 	def	__init__(self):
-		self.signature	= SIGNATURE()
-		self.issuer			= []
-		self.public_key			= []
-		self.version			= 0
-		self.ca_crl_version		= 0
-		self.signer_crl_version		= 0
-		self.title_key			= []
-		self.reserved1			= 0
-		self.title_id			= []
-		self.reserved2			= []
-		self.ticket_version		= []
-		self.reserved3			= []
-		self.license_type		= 0
-		self.ckey_index			= 0
-		self.reserved4			= []
-		self.account_id			= []
-		self.reserved5			= 0
-		self.audit			= 0
-		self.reserved6			= []
-		self.limits			= []
-		self.content_index		= []
-		self.certificates = []
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ''
@@ -251,81 +254,30 @@ class	CETK():
 		self.unpack(unpacker)
 
 	def	unpack(self, unpacker):
-		#print("len %d" % len(unpacker._buffer))
-		if DEBUG_UNPACKING:
-			print("sig:")
-		self.signature.unpack(unpacker)
-		if DEBUG_UNPACKING:
-			print("issuer:")
+		self.signature			= SIGNATURE().unpack(unpacker)
 		self.issuer			= unpacker('>64s')[0].rstrip(b'\x00')
-		if DEBUG_UNPACKING:
-			print("public key:")
 		self.public_key			= unpacker('>60s')[0]
-		if DEBUG_UNPACKING:
-			print("version:")
 		self.version			= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("ca_crl_version:")
 		self.ca_crl_version		= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("signer_crl_version:")
 		self.signer_crl_version		= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("title_key:")
 		self.title_key			= unpacker('>16s')[0]
-		if DEBUG_UNPACKING:
-			print("reserved1:")
 		self.reserved1			= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("ticket_id:")
 		self.ticket_id			= unpacker('>Q')[0]
-		if DEBUG_UNPACKING:
-			print("console_id:")
 		self.console_id			= unpacker('>I')[0]
-		if DEBUG_UNPACKING:
-			print("title_id:")
 		self.title_id			= unpacker('>Q')[0]
-		if DEBUG_UNPACKING:
-			print("reserved2:")
 		self.reserved2			= unpacker('>H')[0]
-		if DEBUG_UNPACKING:
-			print("ticket_title_version:")
 		self.ticket_title_version	= unpacker('>H')[0]
-		if DEBUG_UNPACKING:
-			print("reserved_3:")
 		self.reserved3			= unpacker('8s')[0]
-		if DEBUG_UNPACKING:
-			print("license_type:")
 		self.license_type		= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("ckey_index:")
 		self.ckey_index			= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("reserved4:")
 		self.reserved4			= unpacker('42s')[0]
-		if DEBUG_UNPACKING:
-			print("account_id:")
 		self.account_id			= unpacker('>I')[0]
-		if DEBUG_UNPACKING:
-			print("reserved5:")
 		self.reserved5			= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("audit:")
 		self.audit			= unpacker('B')[0]
-		if DEBUG_UNPACKING:
-			print("reserved6:")
 		self.reserved6			= unpacker('66s')[0]
-		if DEBUG_UNPACKING:
-			print("limits:")
 		self.limits			= unpacker('64s')[0]
-		if DEBUG_UNPACKING:
-			print("content_index:")
 		self.content_index		= unpacker('H')[0]
-		if DEBUG_UNPACKING:
-			print("reserved7:")
 		self.reserved7			= unpacker('5s')[0]
-		if DEBUG_UNPACKING:
-			print("cert_offset:")
 		self.cert_offset		= unpacker('B')[0]
 		# More stuff in here, seems to be some sort of very long bit mask
 		unpacker.seek(0x2A4 + self.cert_offset)
@@ -449,11 +401,18 @@ class TMD_PARSER():
 
 
 class FST_CONTENT():
-	def __init__(self):
-		self.unk = 0
-		self.size = 0
-		self.unk2 = 0
-		self.unklist = []
+	def	__init__(self):
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ""
@@ -473,16 +432,18 @@ class FST_CONTENT():
 
 		
 class FE_ENTRY():
-	def __init__(self):
-		self.type = 0
-		self.name_offset = 0
-		self.f_off = 0
-		self.f_len = 0
-		self.parent = ''
-		self.next = ''
-		self.flags = 0
-		self.content_id = 0
-		self.fn = ''
+	def	__init__(self):
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ""
@@ -507,14 +468,19 @@ class FE_ENTRY():
 		self.content_id		= unpacker('>H')[0]
 		self.fn			= ''
 
-class FST_PARSER(FST_CONTENT, FE_ENTRY):
+class FST_PARSER():
 	def	__init__(self):
-		self.magic		= 0
-		self.unknown1		= 0
-		self.ContentCount	= 0
-		self.unknown2		= []
-		self.fst_contents	= []
-		self.fe_entries		= []
+		# We hook __getattr__/__setattr__ so we can use "header.body" etc
+		# To prevent recursion we need to set our _data member directly.
+		self.__dict__['_data'] = collections.OrderedDict()
+
+	def __getattr__(self, name):
+		return self._data.get(name, None)
+
+	def __setattr__(self, name, value):
+		if DEBUG_UNPACKING:
+			print("%s.%s=%s" % (__name__, name, value))
+		self._data[name] = value
 
 	def	__str__(self):
 		o = ""
@@ -579,7 +545,7 @@ class	ANCAST_HEADER():
 
 	def __setattr__(self, name, value):
 		if DEBUG_UNPACKING:
-			print(name, value)
+			print("%s.%s=%s" % (__name__, name, value))
 		self._data[name] = value
 
 	def	__str__(self):
