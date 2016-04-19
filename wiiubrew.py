@@ -154,10 +154,6 @@ def	update_db_wiiubrew():
 			# Strip notes if it only contains '-'
 			if notes == '-':
 				notes = ''
-			# Strip version strings if they only contain plain version numbers - if they contain text keep as-is
-			if len(re.sub('[Vv0-9, -]', '', versions)) == 0:
-				versions = ''
-			# FIXME - get versions from tagaya.db? or fix after insert?
 			csr.execute("INSERT OR REPLACE INTO updates VALUES (?, ?, ?, ?, ?)", (
 				title_id,
 				description,
@@ -263,12 +259,22 @@ def	refresh_update_versions():
 
 	csr.execute("ATTACH 'tagaya.db' as tagaya")
 	csr.execute('''
-		INSERT OR REPLACE INTO updates (title_id, description, notes, versions, region)
-		SELECT title_id, description, notes, GROUP_CONCAT(title_version, ", "), region
-		FROM updates LEFT JOIN tagaya.title_info USING (title_id) WHERE versions = '' GROUP BY title_id
+		SELECT title_id, description, notes, temp.versions, region FROM updates
+		INNER JOIN (SELECT title_id, GROUP_CONCAT(title_version, ", ") as versions FROM tagaya.title_info GROUP BY title_id) as temp USING (title_id)
+		WHERE updates.versions != temp.versions
+		ORDER BY title_id
 		''')
-	csr.execute("DETACH tagaya")
-	conn.commit()
+	rows = csr.fetchall()
+	for row in rows:
+		#print(type(row), row)
+		# Get each cell into separate vars
+		(title_id, description, notes, versions, region) = row
+		# Put the '-' back in the titleid
+		title_id = re.sub('(0005000E)', '\\1-', title_id.upper())
+		print("|-")
+		for cell in (title_id, description, notes, versions, region):
+			print("| %s" % cell)
+
 	conn.close()
 
 def	main():
