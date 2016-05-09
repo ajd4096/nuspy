@@ -138,6 +138,7 @@ class	SIGNATURE():
 		self.sig_type		= unpacker('>I')[0]
 		self.signature		= unpacker('>%ds' % self.get_length())[0]
 		self.padding		= unpacker('>%ds' % self.get_padding())[0]
+		return self
 
 class TMD_CONTENT():
 	def	__init__(self):
