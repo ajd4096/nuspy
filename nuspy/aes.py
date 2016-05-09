@@ -20,7 +20,7 @@ class AES(object):
     '''
     # Very annoying code:  all is for an object, but no state is kept!
     # Should just be plain functions in a AES modlule.
-    
+
     # valid key sizes
     keySize = dict(SIZE_128=16, SIZE_192=24, SIZE_256=32)
 
@@ -639,8 +639,3 @@ def decryptData(key, data, mode=AESModeOfOperation.modeOfOperation["CBC"]):
     if mode == AESModeOfOperation.modeOfOperation["CBC"]:
         decr = strip_PKCS7_padding(decr)
     return decr
-	
-
-
-
-    

@@ -6,11 +6,11 @@ import	requests
 import	sqlite3
 
 # My modules
-import	global_vars
+import	nuspy.global_vars	as global_vars
 
 def	update_db_wiiubrew():
 	#conn = sqlite3.connect(':memory:')
-	conn = sqlite3.connect('wiiubrew.db')
+	conn = sqlite3.connect('nuspy-wiiubrew.db')
 
 	csr = conn.cursor()
 
@@ -195,7 +195,7 @@ def	update_db_wiiubrew():
 	conn.close()
 
 def	print_titles():
-	conn = sqlite3.connect('wiiubrew.db')
+	conn = sqlite3.connect('nuspy-wiiubrew.db')
 
 	csr = conn.cursor()
 
@@ -214,7 +214,7 @@ def	print_titles():
 	conn.close()
 
 def	print_updates():
-	conn = sqlite3.connect('wiiubrew.db')
+	conn = sqlite3.connect('nuspy-wiiubrew.db')
 
 	csr = conn.cursor()
 
@@ -233,7 +233,7 @@ def	print_updates():
 	conn.close()
 
 def	print_dlc():
-	conn = sqlite3.connect('wiiubrew.db')
+	conn = sqlite3.connect('nuspy-wiiubrew.db')
 
 	csr = conn.cursor()
 
@@ -253,11 +253,11 @@ def	print_dlc():
 
 
 def	refresh_update_versions():
-	conn = sqlite3.connect('wiiubrew.db')
+	conn = sqlite3.connect('nuspy-wiiubrew.db')
 
 	csr = conn.cursor()
 
-	csr.execute("ATTACH 'tagaya.db' as tagaya")
+	csr.execute("ATTACH 'nuspy-tagaya.db' as tagaya")
 	csr.execute('''
 		SELECT title_id, description, notes, temp.versions, region FROM updates
 		INNER JOIN (SELECT title_id, GROUP_CONCAT(title_version, ", ") as versions FROM tagaya.title_info GROUP BY title_id) as temp USING (title_id)
@@ -288,6 +288,9 @@ def	main():
 
 	global_vars.options = parser.parse_args()
 	#print(type(vars(global_vars.options)), vars(global_vars.options))
+
+	if not global_vars.options.fetch and not global_vars.options.refresh and not global_vars.options.titles and not global_vars.options.updates and not global_vars.options.dlc:
+		parser.print_help()
 
 	if global_vars.options.fetch:
 		update_db_wiiubrew()

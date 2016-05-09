@@ -1,31 +1,45 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.5
 
-import sys, os, shutil, pytmd, struct, functools
-import	argparse
+import argparse
 import binascii
-import	bs4
-import	calendar
-import	csv
+import bs4
+import calendar
+import csv
+import functools
 import hashlib
+import os
 import re
 import requests
+import shutil
 import sqlite3
+import struct
+import sys
 import time
 import urllib.request
+import warnings
 
 # My modules
-import	global_vars
-import	wiiubrew
+import nuspy.pytmd		as pytmd
+import nuspy.global_vars	as global_vars
+import nuspy.tagaya		as tagaya
+import nuspy.titlekeys		as titlekeys
+import nuspy.wiiubrew		as wiiubrew
 
 try:
+	# current versions of pycrypto depend on gmp >= 5, but RHEL6 only has gmp 4.3
+	# Using the older gmp could have a timing attack vulnerability if you are doing anything security related.
+	# We don't care about the timing attack, so we can safely suppress the warning.
+	warnings.filterwarnings("ignore", message="Not using mpz_powm_sec.  You should rebuild using libgmp >= 5 to avoid timing attack vulnerability.")
+
 	#Completely borrowed the Cyrpto.Cipher idea from
 	#zecoxao from gbatemp.  His documentation of it really
 	#made it easy.  I was using the aes implementation included
 	#but its painfully slow
+
 	from Crypto.Cipher import *
 	useCrypto = True
 except ImportError:
-	import aes
+	import nuspy.aes as aes
 	useCrypto = False
 
 
@@ -54,11 +68,11 @@ dtkey = [] 			#Decrypted Title Key
 
 # Global class to hold our CLI global_vars.options, so we don't have to pass them around
 global_vars.options = None
-		
+
 
 def downloadTMD(titledir, titleid, ver):
 	cache_dir = os.path.join(titledir, 'cache')
-	
+
 	if global_vars.options.verbose:
 		print("Downloading TMD for:",titleid)
 
@@ -67,7 +81,7 @@ def downloadTMD(titledir, titleid, ver):
 			# No version specified
 			if global_vars.options.tagaya:
 				# Get the version from our DB
-				conn = sqlite3.connect('tagaya.db')
+				conn = sqlite3.connect('nuspy-tagaya.db')
 				csr = conn.cursor()
 				csr.execute('''SELECT IFNULL(MAX(title_version), 0) FROM title_info WHERE title_id = ?''', [titleid])
 				data = csr.fetchone()[0]
@@ -458,7 +472,7 @@ def	decryptContentFile(titledir, tmd, ckey, dkey, content):
 # Wierd design choice, return decrypted data as a string
 def decryptData(keys):
 	data,d_crypt_key,iv_key = keys
-	
+
 	decrypted = ''
 	if useCrypto:
 		try:
@@ -466,16 +480,16 @@ def decryptData(keys):
 			iv = bytes(iv_key)
 			aes_crypto = AES.new(dkey,AES.MODE_CBC, iv)
 			decrypted = aes_crypto.decrypt(bytes(data))
-			
+
 			decrypted =''.join(list(map(chr,[byte for byte in decrypted])))
 		except Exception as e:
-			print(e)	
+			print(e)
 	else:
 		try:
 			moo = aes.AESModeOfOperation()
 			mode = aes.AESModeOfOperation.modeOfOperation["CBC"]
-			keysize = 16	
-			
+			keysize = 16
+
 
 			decrypted = moo.decrypt(data, None, mode, d_crypt_key, keysize, iv_key)
 		except Exception as e:
@@ -490,7 +504,7 @@ def decryptTitleKey(keys):
 	dtkey  = bytes(decrypted.encode('latin-1'))
 
 	return dtkey
-	
+
 def	loadContent(titledir, ver, tmd, ckey, dkey):
 	cache_dir = os.path.join(titledir, 'cache')
 
@@ -773,175 +787,6 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 				print("Copying: %s" % filename + '.h3')
 			shutil.copy2(os.path.join(cache_dir, filename + '.h3'),       os.path.join(packagedir, filename + '.h3'))
 
-def	update_db_tagaya():
-
-	#conn = sqlite3.connect(':memory:')
-	conn = sqlite3.connect('tagaya.db')
-
-	csr = conn.cursor()
-
-	# Create our tables
-	csr.execute('''CREATE TABLE IF NOT EXISTS list_info (
-			list_version	INTEGER,
-			last_modified	INTEGER,
-			PRIMARY KEY (list_version)
-		)''')
-
-	csr.execute('''CREATE TABLE IF NOT EXISTS title_info (
-			title_id	TEXT,
-			title_version	INTEGER,
-			list_version	INTEGER,
-			PRIMARY KEY(title_id, title_version)
-		)''')
-
-	conn.commit()
-
-	# I have checked every versionlist for each region - they are always the same.
-	#for r in ['JAP', 'USA', 'EUR']:
-	for r in ['JAP']:
-		fqdn='tagaya.wup.shop.nintendo.net'
-		current_v = 1
-
-		# Get the "latest_version" file direct from Nintendo
-		if r == "JAP":
-			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/JAP/JP/latest_version"
-		elif r == "USA":
-			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/USA/US/latest_version"
-		elif r == "EUR":
-			url	= "https://tagaya.wup.shop.nintendo.net/tagaya/versionlist/EUR/EU/latest_version"
-
-		# Using Nintendo server certs from 0005001B-10054000, converted using
-		'''
-		# Bundle server cert files from updates/0005001B10054000/extracted/content/scerts/
-		BUNDLE=nintendo_cert_bundle.pem
-		rm -f $BUNDLE
-		for X in CACERT_NINTENDO_*.der; do
-			openssl x509 -inform DER -in $X -outform PEM >> $BUNDLE
-		done
-
-		# Check the bundle works
-		if echo -n "" | openssl s_client -connect tagaya.wup.shop.nintendo.net:443 -CAfile $BUNDLE; then
-			echo "Bundle OK"
-		fi
-		'''
-
-		if global_vars.options.verbose:
-			print("Fetching %s" % url)
-		html = requests.get(url, verify='nintendo_cert_bundle.pem')
-		if html:
-			soup = bs4.BeautifulSoup(html.text, "html.parser")
-			current_v	= int(soup.version.string)
-			fqdn		= soup.fqdn.string
-
-		# Get the highest version we have seen
-		csr = conn.cursor()
-		csr.execute('''SELECT IFNULL(MAX(list_version), 1) FROM list_info''')
-		highest_v = int(csr.fetchone()[0])
-		if global_vars.options.verbose:
-			print("Current list version: %d" % current_v)
-			print("Highest list version in DB: %d" % highest_v)
-
-		for list_v in range(highest_v +1, current_v +1):
-			# Get the "NNN.versionlist" file from the CDN
-			if r == "JAP":
-				url	= "https://%s/tagaya/versionlist/JAP/JP/list/%s.versionlist" % (fqdn, list_v)
-			elif r == "USA":
-				url	= "https://%s/tagaya/versionlist/USA/US/list/%s.versionlist" % (fqdn, list_v)
-			elif r == "EUR":
-				url	= "https://%s/tagaya/versionlist/EUR/EU/list/%s.versionlist" % (fqdn, list_v)
-
-			#print(r, url)
-			if global_vars.options.verbose:
-				print("Fetching %s" % url)
-			requests.packages.urllib3.disable_warnings()
-			html = requests.get(url, verify=False)
-			if html:
-				# Get the time from the URL's Last-Modified header if it exists
-				last_modified = html.headers['Last-Modified']
-				if last_modified:
-					# Get the time as seconds-since-epoch UTC
-					t = calendar.timegm(time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z'))
-				else:
-					t = 0
-				#print(r, list_v, t)
-				csr.execute("INSERT OR IGNORE INTO list_info VALUES (?, ?)", (list_v, t))
-
-				soup = bs4.BeautifulSoup(html.text, "html.parser")
-				#print(soup)
-				titles = soup.find("titles")
-				#print(titles)
-				for title in titles.findAll("title"):
-					#print(title)
-					title_i	= title.find("id").string
-					title_v	= title.find("version").string
-					#print(r, title_i, title_v, list_v)
-					csr.execute("INSERT OR IGNORE INTO title_info VALUES (?, ?, ?)", (title_i, title_v, list_v))
-				conn.commit()
-	# Close the DB connection
-	conn.close()
-
-def	update_db_titlekeys():
-
-	#conn = sqlite3.connect(':memory:')
-	conn = sqlite3.connect('titlekeys.db')
-
-	csr = conn.cursor()
-
-	# Create our tables
-	csr.execute('''CREATE TABLE IF NOT EXISTS title_keys (
-		name		TEXT,
-		region		TEXT,
-		size_rpx	REAL,
-		size_rpls	REAL,
-		size_content	REAL,
-		key_wud		TEXT,
-		key_nus		TEXT,
-		game_id		TEXT,
-		languages	TEXT,
-		title_id	TEXT,
-		version		INTEGER,
-		comment		TEXT,
-		PRIMARY KEY (title_id)
-		)''')
-
-	conn.commit()
-
-
-	url = "https://docs.google.com/spreadsheets/d/1l427nnapxKEUBA-aAtiwAq1Kw6lgRV-hqdocpKY6vQ0/export?format=csv"
-	if global_vars.options.verbose:
-		print("Fetching %s" % url)
-	html = requests.get(url)
-	if html:
-		# Using DictReader isn't much of an advantage - if the table headers change the code needs fixing anyway :|
-		reader = csv.DictReader(html.text.splitlines())
-		for line in reader:
-			#print(type(line), line)
-			csr.execute("INSERT OR IGNORE INTO title_keys VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
-				line['Game'],
-				line['Region'],
-				line['RPX (MBs)'],
-				line['RPLs (MBs)'],
-				line['Content (GBs)'],
-				line['WUD key'],
-				line['NUS key (encrypted)'],
-				line['Game ID'],
-				line['Languages'],
-				line['Title ID'],
-				line['Version'],
-				line['Comment'],
-				))
-		conn.commit()
-
-def	get_ekey_from_titlekeys(titleid):
-	# Get the version from our DB
-	conn = sqlite3.connect('titlekeys.db')
-	csr = conn.cursor()
-	csr.execute('''SELECT key_nus FROM title_keys WHERE title_id = ?''', [titleid])
-	data = csr.fetchone()
-	conn.close()
-	if data:
-		return data[0]
-
 def main():
 	parser = argparse.ArgumentParser(
 		prog='nuspy.py',
@@ -983,10 +828,10 @@ Download and package UPDATEID ready for WUP installer:
 		filedir = os.getcwd()
 
 	if global_vars.options.tagaya:
-		update_db_tagaya()
+		tagaya.update_db_tagaya()
 
 	if global_vars.options.titlekeys:
-		update_db_titlekeys()
+		titlekeys.update_db_titlekeys()
 
 	if global_vars.options.wiiubrew:
 		wiiubrew.update_db_wiiubrew()

@@ -1,11 +1,13 @@
 
-import struct, functools, ctypes
 import binascii
-import	collections
+import collections
+import ctypes
+import functools
 import hashlib
+import struct
 
 # My modules
-import	global_vars
+import nuspy.global_vars as global_vars
 
 WiiUCommenDevKey = b'\x2F\x5C\x1B\x29\x44\xE7\xFD\x6F\xC3\x97\x96\x4B\x05\x76\x91\xFA'
 wiiu_common_key = b'\xD7\xB0\x04\x02\x65\x9B\xA2\xAB\xD2\xCB\x0D\xB2\x7F\xA2\xB6\x56'
@@ -421,7 +423,7 @@ class FST_CONTENT():
 		self.unk2		= unpacker('>I')[0]
 		self.unklist		= unpacker('>5I')
 
-		
+
 class FE_ENTRY():
 	def	__init__(self):
 		# We hook __getattr__/__setattr__ so we can use "header.body" etc
