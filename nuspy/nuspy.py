@@ -868,33 +868,37 @@ Download and package UPDATEID ready for WUP installer:
 			print("Using decrypted title key: %s" % global_vars.options.dec_title_key)
 			d_title_key = binascii.unhexlify(global_vars.options.dec_title_key)
 
+		elif global_vars.options.enc_title_key == 'titlekeys':
+			# Check our titlekeys DB
+			ekey = titlekeys.get_ekey_from_titlekeys(titleid)
+			if not ekey:
+				print("Encrypted title key not in DB")
+				continue
+			print("Using encrypted title key from DB: %s" % ekey)
+			# Decrypt the encrypted title key using the common key and the title ID
+			title_iv = tmd.title_id + b'\x00' * 8
+			keys = ( binascii.unhexlify(ekey), ckey, title_iv)
+			d_title_key = decryptTitleKey(keys)
+
 		elif global_vars.options.enc_title_key:
 			print("Using encrypted title key: %s" % global_vars.options.enc_title_key)
 			# Decrypt the encrypted title key using the common key and the title ID
 			title_iv = tmd.title_id + b'\x00' * 8
 			keys = ( binascii.unhexlify(global_vars.options.enc_title_key), ckey, title_iv)
 			d_title_key = decryptTitleKey(keys)
+
 		else:
-			# Check our titlekeys DB
-			ekey = get_ekey_from_titlekeys(titleid)
-			if ekey:
-				print("Using encrypted title key from DB: %s" % ekey)
-				# Decrypt the encrypted title key using the common key and the title ID
-				title_iv = tmd.title_id + b'\x00' * 8
-				keys = ( binascii.unhexlify(ekey), ckey, title_iv)
-				d_title_key = decryptTitleKey(keys)
-			else:
-				# Try without any key
-				# Download and parse the CETK file
-				downloadCETK(titledir, titleid)
-				cetk = parseCETK(titledir)
+			# Try without any key
+			# Download and parse the CETK file
+			downloadCETK(titledir, titleid)
+			cetk = parseCETK(titledir)
 
-				print("Using cetk key: %s" % binascii.hexlify(cetk.title_key))
+			print("Using cetk key: %s" % binascii.hexlify(cetk.title_key))
 
-				# Decrypt the encrypted title key using the common key and the title ID
-				title_iv = tmd.title_id + b'\x00' * 8
-				keys = (cetk.title_key, ckey, title_iv)
-				d_title_key = decryptTitleKey(keys)
+			# Decrypt the encrypted title key using the common key and the title ID
+			title_iv = tmd.title_id + b'\x00' * 8
+			keys = (cetk.title_key, ckey, title_iv)
+			d_title_key = decryptTitleKey(keys)
 
 		print("Decrypted Title Key:", binascii.hexlify(d_title_key))
 
