@@ -26,20 +26,26 @@ You will probably have to use pip.
 Probably installed when you installed Python 3.
 
 ### Centos 6
+The easiest way to install Python 3 is from the ius repo at http://ius.io
 ```
-# The easiest way to install Python 3 is from the ius repo at http://ius.io
 sudo yum install https://centos6.iuscommunity.org/ius-release.rpm
 sudo yum install python35u python35u-setuptools python35u-tkinter
 sudo ln -sf python3.5 /usr/bin/python3
+```
 
-# Install direct dependencies
-# (You only need sqlite if you want to use the database files in external scripts.)
+Install direct dependencies
+(You only need sqlite if you want to use the database files in external scripts.)
+```
 sudo yum install sqlite
+```
 
-# Install build dependencies
+Install build dependencies
+```
 sudo yum install python35u-devel gmp-devel
+```
 
-# Install nuspy using:
+Install nuspy using:
+```
 sudo python3.5 setup.py install
 ```
 -----
@@ -47,13 +53,14 @@ sudo python3.5 setup.py install
 # For the lazy:
 
 Download and extract TITLEID ready for loadiine:
-
-nuspy.py -e --ekey=KEY TITLEID
+```
+nuspy -e --ekey=KEY TITLEID
+```
 
 Download and package UPDATEID ready for WUP installer:
-
-nuspy.py -w UPDATEID
-
+```
+nuspy -w UPDATEID
+```
 -----
 # Warning:
 
