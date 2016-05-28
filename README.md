@@ -25,7 +25,10 @@ You will probably have to use pip.
 ## sqlite3
 Probably installed when you installed Python 3.
 
-### Centos 6
+-----
+
+# Installation:
+## Centos 6
 The easiest way to install Python 3 is from the ius repo at http://ius.io
 ```
 sudo yum install https://centos6.iuscommunity.org/ius-release.rpm
@@ -48,7 +51,8 @@ Install nuspy using:
 ```
 sudo python3.5 setup.py install
 ```
------
+
+----
 
 # For the lazy:
 
@@ -61,8 +65,10 @@ Download and package UPDATEID ready for WUP installer:
 ```
 nuspy -w UPDATEID
 ```
------
-# Warning:
+
+----
+
+ Warning:
 
 This now stashes info in a few sqlite3 DBs.
 * I make *zero* promises to keep it the same across updates.
