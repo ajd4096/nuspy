@@ -335,7 +335,7 @@ class TMD_PARSER():
 		self.tmd_srl_flag		= unpacker('1c')[0]
 		self.tmd_reserved2		= unpacker('49s')[0]
 		self.tmd_access_rights		= '%08X' % unpacker('>I')[0]
-		self.tmd_title_version		= '%04X' % unpacker('>H')[0]
+		self.tmd_title_version		= unpacker('>H')[0]
 		self.tmd_number_of_contents	= unpacker('>H')[0]
 		self.tmd_boot_index		= unpacker('>H')[0]
 		self.tmd_padding3		= unpacker('2s')[0]

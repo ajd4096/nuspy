@@ -177,7 +177,7 @@ def	parseTMD(titledir, ver):
 	tmd = pytmd.TMD_PARSER()
 	tmd.loadFile(tmd_path)
 	print("Parsing TMD for: %s" % tmd.title_id_hex)
-	print("Title version", tmd.tmd_title_version)
+	print("Title version %d (0x%4.4X)" % (tmd.tmd_title_version, tmd.tmd_title_version))
 	if global_vars.options.verbose:
 		print("Titles found:")
 		for title in tmd.tmd_contents:
@@ -538,7 +538,7 @@ def	loadContent(titledir, ver, tmd, ckey, dkey):
 
 def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
-	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
+	output_dir = os.path.join(titledir, 'extracted.%4.4X' % tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
 	if not global_vars.options.extract_meta_file and not global_vars.options.extract_meta_dir:
@@ -567,7 +567,7 @@ def	extractFstDirectory(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 # I think this is a "copy from original" check
 def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
-	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
+	output_dir = os.path.join(titledir, 'extracted.%4.4X' % tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 	output_file = os.path.join(output_dir, fe.fn)
 
@@ -609,7 +609,7 @@ def	extractFstFileCopy(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 
 def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	cache_dir = os.path.join(titledir, 'cache')
-	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version, currentdir)
+	output_dir = os.path.join(titledir, 'extracted.%4.4X' % tmd.tmd_title_version, currentdir)
 	fe = fst.fe_entries[fstindex]
 
 	if (global_vars.options.extract_meta_file and (currentdir != 'meta' or fe.fn != 'meta.xml')):
@@ -678,7 +678,7 @@ def	extractFstFile(titledir, fst, tmd, ckey, dkey, currentdir, fstindex):
 	input_file.close()
 
 def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
-	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version)
+	output_dir = os.path.join(titledir, 'extracted.%4.4X' % tmd.tmd_title_version)
 
 	# Start with a clean dir
 	if (os.path.exists(output_dir)):
@@ -692,7 +692,7 @@ def	extractFiles(titledir, ver, fst, tmd, ckey, dkey):
 	extractFstDirectory(titledir, fst, tmd, ckey, dkey, '', 0)
 
 def	extractAncastImage(titledir, ver, tmd, header):
-	output_dir = os.path.join(titledir, 'extracted.' + tmd.tmd_title_version)
+	output_dir = os.path.join(titledir, 'extracted.%4.4X' % tmd.tmd_title_version)
 
 	# Start with a clean dir
 	if (os.path.exists(output_dir)):
@@ -734,7 +734,7 @@ def	extractAncastImage(titledir, ver, tmd, header):
 
 def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	cache_dir = os.path.join(titledir, 'cache')
-	packagedir = os.path.join(titledir, 'install.' + tmd.tmd_title_version)
+	packagedir = os.path.join(titledir, 'install.%4.4X' % tmd.tmd_title_version)
 
 	# Start with a clean dir
 	if (os.path.isdir(packagedir)):
