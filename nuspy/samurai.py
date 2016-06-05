@@ -8,6 +8,8 @@ import sqlite3
 # My modules
 import	nuspy.global_vars	as global_vars
 
+DEBUG_LEVEL      = 3
+
 def	update_db_samurai(regions, nids, tids):
 	conn = sqlite3.connect('nuspy-samurai.db')
 	csr = conn.cursor()
@@ -37,10 +39,14 @@ def	update_db_samurai(regions, nids, tids):
 
 	# If the user specified NIDs, use them
 	if nids and len(nids):
+		if global_vars.options.verbose:
+			print("Checking NIDs")
 		nid_list = nids
 
 	# If the user specified TIDs, look up the matching NIDs
 	if tids and len(tids):
+		if global_vars.options.verbose:
+			print("Checking TIDs")
 		for tid in tids:
 			if global_vars.options.verbose:
 				print("Checking title_id %s" % tid)
@@ -67,18 +73,20 @@ def	update_db_samurai(regions, nids, tids):
 					soup = bs4.BeautifulSoup(html.text, "html.parser")
 					title_id_pair_list = soup.findAll("title_id_pair")
 					# We asked for one value, we should get one result
-					assert(len(title_id_pair_list) == 1)
-					for title_id_pair in title_id_pair_list:
-						nid = title_id_pair.findAll("ns_uid")[0].string
-						tid2 = title_id_pair.findAll('title_id')[0].string
-						assert(tid == tid2)
-						# Add the id_pair to our table
-						csr.execute("INSERT OR REPLACE INTO id_pair VALUES (?, ?)", (tid, nid))
-						# Add the nid to our list
-						nid_list.append(nid)
+					if len(title_id_pair_list) == 1:
+						for title_id_pair in title_id_pair_list:
+							nid = title_id_pair.findAll("ns_uid")[0].string
+							tid2 = title_id_pair.findAll('title_id')[0].string
+							assert(tid == tid2)
+							# Add the id_pair to our table
+							csr.execute("INSERT OR REPLACE INTO id_pair VALUES (?, ?)", (tid, nid))
+							# Add the nid to our list
+							nid_list.append(nid)
 
 	# If the user didn't specify any NIDs or TIDs, get every NID for each region
-	if len(nid_list) == 0:
+	if (not tids or len(tids) == 0) and (not nids or len(nids) == 0):
+		if global_vars.options.verbose:
+			print("Fetching all NIDs")
 		# For each region...
 		for region in regions:
 			# Get the country code
@@ -111,6 +119,10 @@ def	update_db_samurai(regions, nids, tids):
 					# If we got fewer than the limit we requested, we have hit the end
 					if len(title_node_list) < limit:
 						break
+
+	if global_vars.options.verbose >= DEBUG_LEVEL:
+		for nid in nid_list:
+			print("%s" % nid)
 
 	# Now we have a full list of NIDs, fetch the XML for each NID for each region
 	for region in regions:
@@ -155,6 +167,7 @@ def	update_db_samurai(regions, nids, tids):
 						assert(nid == nid2)
 						tid = title_id_pair.findAll('title_id')[0].string
 						csr.execute("INSERT OR REPLACE INTO id_pair VALUES (?, ?)", (tid, nid))
+						conn.commit()
 
 			# See if we already have the title_xml for this nid
 			csr.execute('''SELECT ns_uid FROM title_xml WHERE ns_uid = ? AND region = ?''', [nid, region])
@@ -174,8 +187,7 @@ def	update_db_samurai(regions, nids, tids):
 					assert(len(title_list) == 1)
 					# Save the xml in our table
 					csr.execute("INSERT OR REPLACE INTO title_xml VALUES (?, ?, ?)", (nid, region, html.text))
-
-			conn.commit()
+					conn.commit()
 
 	conn.close()
 
