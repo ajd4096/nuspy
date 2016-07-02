@@ -751,6 +751,13 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	if global_vars.options.verbose:
 		print("Copying: title.tik")
 	shutil.copy2(os.path.join(cache_dir, 'cetk'),       os.path.join(packagedir, 'title.tik'))
+	# Patch WUD TIK to suit WUP installer
+	data_tik = open(os.path.join(cache_dir, 'cetk'), 'rb').read()
+	if global_vars.options.patchtik and data_tik[1] == 3:
+		data_tik[1] = 1
+		data_tik[0x0F] ^= 2
+	open(os.path.join(packagedir, 'title.tik'), 'wb').write(data_tik)
+
 
 	# Copy the certs from the tmd, cetk files
 	if global_vars.options.verbose:
@@ -758,12 +765,20 @@ def	packageForWUP(titledir, ver, tmd, cetk, keys):
 	packer = pytmd.buffer_packer()
 
 	# We can take our root cert from either file
-	cetk.certificates[1].pack(packer)
-	#tmd.certificates[1].pack(packer)
+	#cetk.certificates[1].pack(packer)
+	tmd.certificates[1].pack(packer)
 
 	tmd.certificates[0].pack(packer)
 
-	cetk.certificates[0].pack(packer)
+	# If the cetk has a cert, use it
+	if len(cetk.certificates):
+		cetk.certificates[0].pack(packer)
+	else:
+		# Else use a default cert (manually extracted from OSv10, but they're all the same except boot1 & boot2)
+		# Extract using: dd of=cetk of=default.cetk.cert bs=1 skip=848 count=768
+		# MD5 (default.cetk.cert) = a829ba9a06accf81954e6e0c2c6f884c
+		data = open('default.cetk.cert', 'rb').read()
+		packer('>%ds' % len(data), data)
 
 	open(os.path.join(packagedir, 'title.cert'), 'wb').write(bytes(packer._buffer))
 
@@ -812,6 +827,7 @@ Download and package UPDATEID ready for WUP installer:
 	parser.add_argument('-m',	'--meta-file',	dest='extract_meta_file',	help='extract only the meta.xml file',			action='store_true',		default=False)
 	parser.add_argument('-M',	'--meta-dir',	dest='extract_meta_dir',	help='extract only the meta/ directory',		action='store_true',		default=False)
 	parser.add_argument('-w',	'--wup',	dest='wup',			help='pack for WUP installer',				action='store_true',		default=False)
+	parser.add_argument('-p'	'--patchtik',	dest='patchtik',		help='patch WUD tik for WUP installer',			action='store_true',		default=False)
 	parser.add_argument('-t',	'--tagaya',	dest='tagaya',			help='update title DB from tagaya',			action='store_true',		default=False)
 	parser.add_argument(		'--titlekeys',	dest='titlekeys',		help='update titlekeys DB from G docs',			action='store_true',		default=False)
 	parser.add_argument(		'--wiiubrew',	dest='wiiubrew',		help='update wiiubrew DB',				action='store_true',		default=False)
