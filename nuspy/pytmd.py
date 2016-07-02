@@ -135,6 +135,8 @@ class	SIGNATURE():
 		packer('>%ds' % self.get_padding(), self.padding)
 
 	def	unpack(self, unpacker):
+		#print(">>> @ %d %X" % (unpacker.tell(), unpacker.tell()))
+		#print(unpacker.peek16())
 		self.sig_type		= unpacker('>I')[0]
 		self.signature		= unpacker('>%ds' % self.get_length())[0]
 		self.padding		= unpacker('>%ds' % self.get_padding())[0]
@@ -284,13 +286,16 @@ class	CETK():
 		self.content_index		= unpacker('H')[0]
 		self.reserved7			= unpacker('5s')[0]
 		self.cert_offset		= unpacker('B')[0]
+		#print("@ %d %X" % (unpacker.tell(), unpacker.tell()))
 		# More stuff in here, seems to be some sort of very long bit mask
-		unpacker.seek(0x2A4 + self.cert_offset)
 		certificates = []
-		while not unpacker.iseof():
-			cert = TMD_CERT()
-			cert.unpack(unpacker)
-			certificates.append(cert)
+		if (0x2A4 + self.cert_offset < unpacker.length()):
+			unpacker.seek(0x2A4 + self.cert_offset)
+			while not unpacker.iseof():
+				#print("@ %d %X" % (unpacker.tell(), unpacker.tell()))
+				cert = TMD_CERT()
+				cert.unpack(unpacker)
+				certificates.append(cert)
 		self.certificates = certificates
 
 class TMD_PARSER():
