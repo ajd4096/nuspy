@@ -65,7 +65,8 @@ def	update_db_titlekeys():
 	conn.commit()
 
 
-	url = "https://docs.google.com/spreadsheets/d/1l427nnapxKEUBA-aAtiwAq1Kw6lgRV-hqdocpKY6vQ0/export?format=csv"
+	url = "https://docs.google.com/spreadsheets/d/1l427nnapxKEUBA-aAtiwAq1Kw6lgRV-hqdocpKY6vQ0/export?format=csv&gid=923297102"
+
 	if global_vars.options.verbose:
 		print("Fetching %s" % url)
 	html = requests.get(url)
